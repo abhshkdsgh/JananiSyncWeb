@@ -1,0 +1,11 @@
+{
+  "policyVersion": "1.3",
+  "effectiveDate": "2026-11-02",
+  "policySha256": "5eba1c4e9aef617b20d48dd452dc1f8bf203377f269e4f2e1cd9be11a9bd6b09",
+  "hashFormat": "SHA-256 of exact UTF-8 policy Markdown bytes, LF, including final newline",
+  "presentationVersion": 2,
+  "acceptanceStatement": "Selecting ‘Accept and continue’ records acceptance of Privacy Policy version 1.3 for your account and service processing. It is not consent on behalf of any patient.",
+  "denialStatement": "Selecting ‘Deny and stop’ records denial of Privacy Policy version 1.3. Organisation and clinical access remain blocked.",
+  "acceptButton": "Accept and continue",
+  "denyButton": "Deny and stop"
+}

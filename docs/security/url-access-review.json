@@ -1,0 +1,26 @@
+{
+  "score": 2,
+  "summary": "Focused review of local URL routing and Firestore authorization. Tested direct unauthorized requests were denied. The score reflects an existing admin roster workflow defect, not a demonstrated URL-based privilege escalation. Live Firebase deployment and a comprehensive security audit are outside this assessment.",
+  "findings": [
+    {
+      "check": "Business Logic vs. Rules",
+      "severity": "major",
+      "issue": "The admin dashboard offers ward setup/configuration, but wards and women permit reads only through activeClinicalMember (doctor/nurse). An admin can write ward configuration but cannot read the roster required by that UI.",
+      "recommendation": "Decide which roster metadata administrators should see, then align the UI and authorization rules with that policy. This change intentionally does not broaden admin permissions."
+    }
+  ],
+  "scope": [
+    "Address-bar identifiers are validated and cannot provide role, access level, user identity, or organization membership.",
+    "Clinical selection uses the current organization's authorized roster and checks the admission belongs to the selected ward.",
+    "Signed-out and unverified protected routes do not render clinical content.",
+    "Local Firestore rules deny unauthorized direct reads, cross-organization reads, self-promotion, unauthorized membership changes, key grants, and ward administration writes.",
+    "Clinical read access remains organization-wide, not restricted to individual assigned wards or patients."
+  ],
+  "verification": {
+    "firestore_emulator_command": "npm run test:security",
+    "firestore_emulator_test_groups": 5,
+    "firestore_emulator_result": "passed",
+    "live_rules_verified": false,
+    "production_deployment_performed": false
+  }
+}

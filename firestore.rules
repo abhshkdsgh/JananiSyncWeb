@@ -1,0 +1,1376 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Privacy model (independent of email verification so provisional accounts can decide):
+    // users/{uid}/privacyEvents/{20-char auto ID}: immutable, owner-readable decision;
+    // schemaVersion (1), presentationVersion (2), userId (1..128), token email (1..320),
+    // token emailVerified (bool), policyVersion/hash (pinned below), accepted/denied,
+    // source (signup/account_gate/settings), server createdAt, client clock (epoch ms),
+    // language (1..64), userAgent (0..512; client-reported, not independently verified).
+    // users/{uid}/privacy/current: userId, lastEventId, decision, pinned policyVersion/hash,
+    // server updatedAt. Both records must be committed atomically, each pointing to
+    // the other. No client can edit/delete historical events or replay an old event.
+    // Additional key-storage data model implemented here:
+    // organizations/{orgId}/keyReplacementRequests/{uid}: userId, requestId (opaque 22 chars),
+    // previousFingerprint, profile (validated public key), backup (validated encrypted private key),
+    // createdAt, status (pending/approved/rejected/cancelled); resolvedBy/resolvedAt on resolution.
+    // Only active clinical members request; only active admins approve with an atomic regrant.
+    // organizations/{orgId}/keyProfiles/{uid}: userId, publicKeyJwk (string <= 4096),
+    //   publicKeyFingerprint (string <= 64), keyAlgorithm (fixed string), createdAt (timestamp).
+    // organizations/{orgId}/keyMetadata/current: currentKeyVersion (int), algorithm
+    //   (fixed string), updatedAt (timestamp), updatedBy (UID). Admin-write/member-read.
+    // organizations/{orgId}/keyEnvelopes/{uid}: userId, keyVersion, wrappedKey
+    //   (base64 RSA ciphertext <= 2048), algorithm, grantedBy, createdAt. Only the
+    //   owner and org admins can read; only admins can create/replace envelopes.
+    // organizations/{orgId}/keyBackups/{uid}: ciphertext, iv, salt, KDF metadata,
+    //   algorithm, updatedAt. Contains only that org's recovery-encrypted private JWK;
+    //   the member alone can read or replace it.
+    // Data model: organizations/{orgId}/clinicalData/v1/lcgObservations/{autoId}
+    // Cell events additionally expose columnId/cellKey, revision, and cellKeys
+    // (1-4 distinct alphanumeric field keys; confirmations omit cellKeys).
+    // cellCorrection events additionally require reasonCiphertext (24..8192
+    // base64 chars), reasonIv (12 bytes base64), and correctedRevision (old revision).
+    // lcgColumns stores revision/confirmation/editor metadata and cellAccessLevels,
+    // a map (<=256 keys) from touched field keys to their latest editor access level.
+    // Older columns may omit this map; migrate trusted history before rollout.
+    // Clinical values remain client-encrypted; rules enforce envelope, membership and audit metadata.
+    // Client-generated IDs are bounded; times are nonnegative epoch milliseconds.
+    // Sign-offs reference new immutable events in the same atomic write.
+    function privacyOwner(uid) {
+      return request.auth != null && request.auth.uid == uid
+        && uid.size() > 0 && uid.size() <= 128;
+    }
+
+    function currentPrivacyPolicyHash() {
+      return '5eba1c4e9aef617b20d48dd452dc1f8bf203377f269e4f2e1cd9be11a9bd6b09';
+    }
+
+    function currentPrivacyPolicy(version, hash) {
+      return version == '1.3' && hash == currentPrivacyPolicyHash();
+    }
+
+    function acceptedCurrentPrivacyPolicy(uid) {
+      let receipt = get(/databases/$(database)/documents/users/$(uid)/privacy/current).data;
+      // Ownership/schema are enforced on every receipt write. Keep this read check
+      // compact because clinical multi-cell writes invoke authorization repeatedly.
+      return receipt.decision == 'accepted' && receipt.policyVersion == '1.3'
+        && receipt.policySha256 == '5eba1c4e9aef617b20d48dd452dc1f8bf203377f269e4f2e1cd9be11a9bd6b09';
+    }
+
+    function verifiedUser() {
+      return request.auth != null && request.auth.token.email_verified == true
+        && acceptedCurrentPrivacyPolicy(request.auth.uid);
+    }
+
+    function validPrivacyEventId(eventId) {
+      return eventId is string && eventId.matches('^[A-Za-z0-9]{20}$');
+    }
+
+    function validPrivacyEvent(data, uid) {
+      return data.keys().hasAll(['schemaVersion', 'userId', 'email', 'emailVerified',
+          'policyVersion', 'policySha256', 'decision', 'source', 'presentationVersion',
+          'createdAt', 'clientOccurredAtMillis', 'language', 'userAgent'])
+        && data.keys().hasOnly(['schemaVersion', 'userId', 'email', 'emailVerified',
+          'policyVersion', 'policySha256', 'decision', 'source', 'presentationVersion',
+          'createdAt', 'clientOccurredAtMillis', 'language', 'userAgent'])
+        && data.schemaVersion is int && data.schemaVersion == 1
+        && data.userId is string && data.userId == uid && data.userId.size() <= 128
+        && data.email is string && data.email.size() > 0 && data.email.size() <= 320
+        && data.email == request.auth.token.email
+        && data.emailVerified is bool && data.emailVerified == request.auth.token.email_verified
+        && currentPrivacyPolicy(data.policyVersion, data.policySha256)
+        && data.decision in ['accepted', 'denied']
+        && data.source in ['signup', 'account_gate', 'settings']
+        && data.presentationVersion is int && data.presentationVersion == 2
+        && data.createdAt is timestamp && data.createdAt == request.time
+        && data.clientOccurredAtMillis is int && data.clientOccurredAtMillis >= 0
+        && data.clientOccurredAtMillis <= 253402300799999
+        && data.language is string && data.language.size() > 0 && data.language.size() <= 64
+        && data.userAgent is string && data.userAgent.size() <= 512;
+    }
+
+    function validPrivacyReceipt(data, uid) {
+      return data.keys().hasAll(['userId', 'lastEventId', 'decision', 'policyVersion', 'policySha256', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'lastEventId', 'decision', 'policyVersion', 'policySha256', 'updatedAt'])
+        && data.userId is string && data.userId == uid && data.userId.size() <= 128
+        && validPrivacyEventId(data.lastEventId)
+        && data.decision in ['accepted', 'denied']
+        && currentPrivacyPolicy(data.policyVersion, data.policySha256)
+        && data.updatedAt is timestamp && data.updatedAt == request.time;
+    }
+
+    function privacyEventMatchesReceipt(event, receipt, uid, eventId) {
+      return validPrivacyEvent(event, uid) && validPrivacyReceipt(receipt, uid)
+        && receipt.lastEventId == eventId && receipt.decision == event.decision
+        && receipt.policyVersion == event.policyVersion && receipt.policySha256 == event.policySha256
+        && receipt.updatedAt == event.createdAt;
+    }
+
+    function validNewPrivacyReceipt(data, uid) {
+      return validPrivacyReceipt(data, uid)
+        && !exists(/databases/$(database)/documents/users/$(uid)/privacyEvents/$(data.lastEventId))
+        && privacyEventMatchesReceipt(
+          getAfter(/databases/$(database)/documents/users/$(uid)/privacyEvents/$(data.lastEventId)).data,
+          data, uid, data.lastEventId);
+    }
+
+    match /users/{uid}/privacyEvents/{eventId} {
+      allow get: if privacyOwner(uid);
+      allow list: if privacyOwner(uid) && request.query.limit != null && request.query.limit <= 100;
+      allow create: if privacyOwner(uid) && validPrivacyEventId(eventId)
+        && privacyEventMatchesReceipt(request.resource.data,
+          getAfter(/databases/$(database)/documents/users/$(uid)/privacy/current).data, uid, eventId);
+      allow update, delete: if false;
+    }
+
+    match /users/{uid}/privacy/{receiptId} {
+      allow get: if receiptId == 'current' && privacyOwner(uid);
+      allow list, delete: if false;
+      allow create, update: if receiptId == 'current' && privacyOwner(uid)
+        && validNewPrivacyReceipt(request.resource.data, uid);
+    }
+
+    function organizationExists(orgId) {
+      return validOrganizationCode(orgId)
+        && exists(/databases/$(database)/documents/organizations/$(orgId));
+    }
+
+    function validOrganizationCode(orgId) {
+      return orgId.matches('^[A-Za-z0-9]{8}$');
+    }
+
+    // Authenticate before reading membership; the path UID is the authority for identity.
+    function validActiveMembership(member, uid) {
+      return member is map && member.userId == uid && member.status == 'active'
+        && validRole(member.role) && validAccessLevel(member.accessLevel);
+    }
+
+    function activeMember(orgId) {
+      return validOrganizationCode(orgId) && verifiedUser()
+        && validActiveMembership(
+          get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data,
+          request.auth.uid);
+    }
+
+    function activeAdmin(orgId) {
+      return activeMember(orgId)
+        && get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Maintenance is operational metadata only. Secrets remain encrypted in admin journals.
+    function maintenanceActive(orgId) {
+      return exists(/databases/$(database)/documents/organizations/$(orgId)/keyMaintenance/current)
+        && get(/databases/$(database)/documents/organizations/$(orgId)/keyMaintenance/current).data.active;
+    }
+    function maintenanceAfter(orgId) {
+      return existsAfter(/databases/$(database)/documents/organizations/$(orgId)/keyMaintenance/current)
+        && getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyMaintenance/current).data.active;
+    }
+    function writableClinicalMember(orgId) {
+      return activeMember(orgId) && !maintenanceActive(orgId) && !maintenanceAfter(orgId);
+    }
+    function activeClinicalMember(orgId) {
+      // All supported member roles (admin, doctor, nurse) participate in clinical care.
+      return activeMember(orgId) && !maintenanceActive(orgId);
+    }
+
+    function canManageWomanArchive(orgId) {
+      return writableClinicalMember(orgId)
+        && get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.accessLevel >= 60;
+    }
+
+    // getAfter permits approval and key delivery together, while rejecting absent/inactive recipients.
+    function activeKeyRecipient(orgId, uid) {
+      return uid is string && uid.size() > 0 && uid.size() <= 128
+        && validActiveMembership(
+          getAfter(/databases/$(database)/documents/organizations/$(orgId)/members/$(uid)).data, uid);
+    }
+
+    // An immutable roster link makes the archive lock enforceable without decrypting clinical data.
+    function validClinicalRosterLink(orgId, data) {
+      return data.womanDocumentId is string
+        && data.womanDocumentId.matches('^[A-Za-z0-9_-]{1,128}$')
+        && existsAfter(/databases/$(database)/documents/organizations/$(orgId)/women/$(data.womanDocumentId));
+    }
+
+    function writableClinicalColumn(orgId, data) {
+      let woman = getAfter(/databases/$(database)/documents/organizations/$(orgId)/women/$(data.womanDocumentId)).data;
+      return data.womanDocumentId is string && data.womanDocumentId.matches('^[A-Za-z0-9_-]{1,128}$')
+        && woman is map && woman.get('archived', false) == false;
+    }
+
+    // Synthetic demo envelope: ciphertext-only; no patient data or key material.
+    function validSyntheticObservation(data) {
+      return data.keys().hasOnly([
+          'ciphertext', 'iv', 'keyVersion', 'algorithm', 'schemaVersion', 'createdBy', 'createdAt'
+        ])
+        && data.keys().hasAll([
+          'ciphertext', 'iv', 'keyVersion', 'algorithm', 'schemaVersion', 'createdBy', 'createdAt'
+        ])
+        && data.ciphertext is string
+        && data.ciphertext.size() > 0
+        && data.ciphertext.size() <= 4096
+        && data.iv is string
+        && data.iv.matches('^[A-Za-z0-9+/]{16}$')
+        && data.keyVersion == 1
+        && data.algorithm == 'AES-GCM'
+        && data.schemaVersion == 1
+        && data.createdBy is string
+        && data.createdBy.size() > 0
+        && data.createdBy.size() <= 128
+        && data.createdAt is timestamp;
+    }
+
+    function validRole(role) {
+      return role in ['admin', 'doctor', 'nurse'];
+    }
+
+    function validAccessLevel(level) {
+      return level is int && level >= 10 && level <= 99;
+    }
+
+    function validMember(data) {
+      return data.keys().hasOnly(['userId', 'name', 'role', 'status', 'accessLevel', 'joinedAt'])
+        && data.keys().hasAll(['userId', 'name', 'role', 'status', 'accessLevel', 'joinedAt'])
+        && data.userId is string
+        && data.userId.size() > 0 && data.userId.size() <= 128
+        && data.name is string
+        && data.name.size() > 0
+        && data.name.size() <= 160
+        && validRole(data.role)
+        && data.status == 'active'
+        && validAccessLevel(data.accessLevel)
+        && data.joinedAt is timestamp;
+    }
+
+    // Allows an admin to update a legacy member document that may not yet have a name,
+    // while validating the entire resulting document and preserving all non-level fields.
+    function validMemberAfterAccessLevelUpdate(data) {
+      return data.keys().hasOnly(['userId', 'name', 'role', 'status', 'accessLevel', 'joinedAt'])
+        && data.keys().hasAll(['userId', 'role', 'status', 'accessLevel', 'joinedAt'])
+        && data.userId is string
+        && data.userId.size() > 0 && data.userId.size() <= 128
+        && (!('name' in data) || (data.name is string && data.name.size() > 0 && data.name.size() <= 160))
+        && validRole(data.role)
+        && data.status == 'active'
+        && validAccessLevel(data.accessLevel)
+        && data.joinedAt is timestamp;
+    }
+
+    function validMemberAfterStatusUpdate(data) {
+      return data.keys().hasOnly(['userId', 'name', 'role', 'status', 'accessLevel', 'joinedAt'])
+        && data.keys().hasAll(['userId', 'role', 'status', 'accessLevel', 'joinedAt'])
+        && data.userId is string
+        && data.userId.size() > 0 && data.userId.size() <= 128
+        && (!('name' in data) || (data.name is string && data.name.size() > 0 && data.name.size() <= 160))
+        && data.role in ['doctor', 'nurse']
+        && data.status in ['active', 'inactive']
+        && validAccessLevel(data.accessLevel)
+        && data.joinedAt is timestamp;
+    }
+
+    function validAccessRequest(data) {
+      return data.keys().hasOnly([
+          'userId', 'userName', 'userEmail', 'requestedRole', 'status', 'createdAt',
+          'reviewedBy', 'reviewedAt', 'approvedRole', 'cancelledAt'
+        ])
+        && data.keys().hasAll(['userId', 'userName', 'requestedRole', 'status', 'createdAt'])
+        && data.userId is string
+        && data.userId.size() > 0 && data.userId.size() <= 128
+        && data.userName is string
+        && data.userName.size() > 0
+        && data.userName.size() <= 160
+        && (!('userEmail' in data)
+          || (data.userEmail is string
+            && data.userEmail.size() > 0
+            && data.userEmail.size() <= 254))
+        && data.requestedRole in ['doctor', 'nurse']
+        && data.status in ['pending', 'approved', 'rejected', 'cancelled']
+        && data.createdAt is timestamp
+        && ((data.status == 'pending' && !('cancelledAt' in data)
+              && !('reviewedBy' in data)
+              && !('reviewedAt' in data)
+              && !('approvedRole' in data))
+          || (data.status == 'cancelled' && data.cancelledAt is timestamp
+              && !('reviewedBy' in data) && !('reviewedAt' in data) && !('approvedRole' in data))
+          || (data.status in ['approved', 'rejected'] && !('cancelledAt' in data)
+              && data.reviewedBy is string
+              && data.reviewedBy.size() > 0 && data.reviewedBy.size() <= 128
+              && data.reviewedAt is timestamp
+              && (!('approvedRole' in data) || validRole(data.approvedRole))));
+    }
+
+    function validMemberAfterLeave(data) {
+      return data.keys().hasOnly(['userId', 'name', 'role', 'status', 'accessLevel', 'joinedAt', 'leftAt', 'leftDuringRotationId'])
+        && data.keys().hasAll(['userId', 'role', 'status', 'accessLevel', 'joinedAt', 'leftAt', 'leftDuringRotationId'])
+        && data.userId is string && data.userId.size() > 0 && data.userId.size() <= 128
+        && (!('name' in data) || (data.name is string && data.name.size() > 0 && data.name.size() <= 160))
+        && data.role in ['doctor', 'nurse'] && validAccessLevel(data.accessLevel) && data.joinedAt is timestamp
+        && data.status == 'left' && data.leftAt == request.time
+        && data.leftDuringRotationId is string && data.leftDuringRotationId.matches('^[A-Za-z0-9_-]{22}$');
+    }
+
+    function validMemberPublicKeyProfile(data, uid) {
+      return data.keys().hasOnly([
+          'userId', 'publicKeyJwk', 'publicKeyFingerprint', 'keyAlgorithm', 'createdAt'
+        ])
+        && data.keys().hasAll([
+          'userId', 'publicKeyJwk', 'publicKeyFingerprint', 'keyAlgorithm', 'createdAt'
+        ])
+        && data.userId == uid
+        && data.publicKeyJwk is string
+        && data.publicKeyJwk.size() > 0
+        && data.publicKeyJwk.size() <= 4096
+        && data.publicKeyFingerprint is string
+        && data.publicKeyFingerprint.matches('^[A-Za-z0-9_-]{32,64}$')
+        && data.keyAlgorithm == 'RSA-OAEP-3072-SHA256'
+        && data.createdAt is timestamp;
+    }
+
+    function validPrivateKeyBackup(data, uid) {
+      return data.keys().hasOnly([
+          'userId', 'ciphertext', 'iv', 'salt', 'kdf', 'kdfIterations', 'keyAlgorithm', 'updatedAt'
+        ])
+        && data.keys().hasAll([
+          'userId', 'ciphertext', 'iv', 'salt', 'kdf', 'kdfIterations', 'keyAlgorithm', 'updatedAt'
+        ])
+        && data.userId == uid
+        && data.ciphertext is string
+        && data.ciphertext.size() > 0
+        && data.ciphertext.size() <= 16384
+        && data.ciphertext.matches('^[A-Za-z0-9+/]+={0,2}$')
+        && data.iv is string
+        && data.iv.matches('^[A-Za-z0-9+/]{16}$')
+        && data.salt is string
+        && data.salt.matches('^[A-Za-z0-9+/]{22}==$')
+        && data.kdf == 'PBKDF2-SHA256'
+        && data.kdfIterations == 600000
+        && data.keyAlgorithm == 'RSA-OAEP-3072-SHA256'
+        && data.updatedAt is timestamp;
+    }
+
+    // Rotation history: keyHistory/{oldVersion} contains the previous DEK encrypted by its successor.
+    // lcgCells/{columnId}~{cellKey}: bounded current-event projection; sourceEventId + immutable event map.
+    function currentDataKey(orgId, version) {
+      return !maintenanceActive(orgId) && !maintenanceAfter(orgId)
+        && version is int && version >= 1 && version <= 1000000
+        && version == get(/databases/$(database)/documents/organizations/$(orgId)/keyMetadata/current).data.currentKeyVersion;
+    }
+
+    function validKeyMetadata(data) {
+      return data.keys().hasOnly(['currentKeyVersion', 'algorithm', 'updatedAt', 'updatedBy', 'rotationId'])
+        && data.keys().hasAll(['currentKeyVersion', 'algorithm', 'updatedAt', 'updatedBy'])
+        && data.currentKeyVersion is int
+        && data.currentKeyVersion >= 1
+        && data.currentKeyVersion <= 1000000
+        && (!('rotationId' in data) || (data.rotationId is string && data.rotationId.matches('^[A-Za-z0-9_-]{22}$')))
+        && data.algorithm == 'AES-256-GCM'
+        && data.updatedAt is timestamp
+        && data.updatedBy == request.auth.uid;
+    }
+
+    function validKeyEnvelope(data, uid) {
+      return data.keys().hasOnly([
+          'userId', 'keyVersion', 'wrappedKey', 'algorithm', 'grantedBy', 'createdAt'
+        ])
+        && data.keys().hasAll([
+          'userId', 'keyVersion', 'wrappedKey', 'algorithm', 'grantedBy', 'createdAt'
+        ])
+        && data.userId == uid
+        && data.keyVersion is int
+        && data.keyVersion >= 1
+        && data.keyVersion <= 1000000
+        && data.wrappedKey is string
+        && data.wrappedKey.size() > 0
+        && data.wrappedKey.size() <= 2048
+        && data.wrappedKey.matches('^[A-Za-z0-9+/]+={0,2}$')
+        && data.algorithm == 'RSA-OAEP-3072-SHA256'
+        && data.grantedBy == request.auth.uid
+        && data.createdAt is timestamp;
+    }
+
+    function clinicalKeyMember(orgId, uid) {
+      let member = get(/databases/$(database)/documents/organizations/$(orgId)/members/$(uid)).data;
+      return verifiedUser() && member.userId == uid && member.status == 'active' && member.role in ['doctor', 'nurse'];
+    }
+
+    function validKeyReplacement(data, uid) {
+      return data.keys().hasOnly(['userId', 'requestId', 'previousFingerprint', 'profile', 'backup', 'createdAt', 'status', 'resolvedBy', 'resolvedAt'])
+        && data.keys().hasAll(['userId', 'requestId', 'previousFingerprint', 'profile', 'backup', 'createdAt', 'status'])
+        && data.userId == uid && uid.size() > 0 && uid.size() <= 128
+        && data.requestId is string && data.requestId.matches('^[A-Za-z0-9_-]{22}$')
+        && data.previousFingerprint is string && data.previousFingerprint.matches('^[A-Za-z0-9_-]{32,64}$')
+        && data.profile is map && validMemberPublicKeyProfile(data.profile, uid)
+        && data.backup is map && validPrivateKeyBackup(data.backup, uid)
+        && data.profile.publicKeyFingerprint != data.previousFingerprint
+        && data.createdAt is timestamp && data.profile.createdAt == data.createdAt && data.backup.updatedAt == data.createdAt
+        && ((data.status == 'pending' && !data.keys().hasAny(['resolvedBy', 'resolvedAt']))
+          || (data.status in ['approved', 'rejected', 'cancelled'] && data.keys().hasAll(['resolvedBy', 'resolvedAt'])
+            && data.resolvedBy is string && data.resolvedBy.size() > 0 && data.resolvedBy.size() <= 128
+            && data.resolvedAt is timestamp));
+    }
+
+    function replacementAdmin(orgId, uid) {
+      return activeAdmin(orgId) && request.auth.uid != uid && clinicalKeyMember(orgId, uid)
+        && !maintenanceActive(orgId) && !maintenanceAfter(orgId);
+    }
+
+    // Used only by companion writes; the request rule enforces all companions in the same commit.
+    function approvingKeyReplacement(orgId, uid) {
+      let before = get(/databases/$(database)/documents/organizations/$(orgId)/keyReplacementRequests/$(uid)).data;
+      let after = getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyReplacementRequests/$(uid)).data;
+      return replacementAdmin(orgId, uid) && before.status == 'pending' && after.status == 'approved'
+        && after.requestId == before.requestId && after.resolvedBy == request.auth.uid && after.resolvedAt == request.time;
+    }
+
+    match /organizations/{orgId} {
+      // Root metadata: name (required), organizationName, createdAt, status (optional).
+      // Active members may read this metadata; listing and client writes stay denied.
+      // Reject unexpected fields so private data cannot be exposed by this read rule.
+      allow get: if activeMember(orgId)
+        && resource.data.keys().hasOnly(['name', 'organizationName', 'createdAt', 'status'])
+        && resource.data.name is string
+        && resource.data.name.size() > 0
+        && resource.data.name.size() <= 160
+        && (!('organizationName' in resource.data) ||
+          (resource.data.organizationName is string && resource.data.organizationName.size() > 0
+            && resource.data.organizationName.size() <= 160))
+        && (!('createdAt' in resource.data) || resource.data.createdAt is timestamp)
+        && (!('status' in resource.data) ||
+          (resource.data.status is string && resource.data.status.size() > 0
+            && resource.data.status.size() <= 32));
+      allow list, create, update, delete: if false;
+
+      match /members/{memberId} {
+        allow get: if validOrganizationCode(orgId)
+          && verifiedUser()
+          && (request.auth.uid == memberId || activeAdmin(orgId));
+        allow list: if validOrganizationCode(orgId) && activeAdmin(orgId);
+
+        // Approval must be an atomic batch that also marks the request approved.
+        allow create: if activeAdmin(orgId) && !maintenanceActive(orgId) && !maintenanceAfter(orgId)
+          && memberId != request.auth.uid
+          && validMember(request.resource.data)
+          && request.resource.data.userId == memberId
+          && request.resource.data.joinedAt == request.time
+          && exists(/databases/$(database)/documents/organizations/$(orgId)/keyProfiles/$(memberId))
+          && exists(/databases/$(database)/documents/organizations/$(orgId)/keyBackups/$(memberId))
+          && getAfter(/databases/$(database)/documents/organizations/$(orgId)/accessRequests/$(memberId)).data.status == 'approved'
+          && getAfter(/databases/$(database)/documents/organizations/$(orgId)/accessRequests/$(memberId)).data.reviewedBy == request.auth.uid
+          && getAfter(/databases/$(database)/documents/organizations/$(orgId)/accessRequests/$(memberId)).data.userName == request.resource.data.name
+          && getAfter(/databases/$(database)/documents/organizations/$(orgId)/accessRequests/$(memberId)).data.approvedRole == request.resource.data.role;
+        // Rejoin is a distinct narrow transition, evaluated before the general member update rules.
+        allow update: if activeAdmin(orgId) && !maintenanceActive(orgId) && !maintenanceAfter(orgId)
+          && memberId == resource.data.userId && resource.data.status == 'left'
+          && validMember(request.resource.data)
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.joinedAt == request.time
+          && getAfter(/databases/$(database)/documents/organizations/$(orgId)/accessRequests/$(memberId)).data.status == 'approved'
+          && getAfter(/databases/$(database)/documents/organizations/$(orgId)/accessRequests/$(memberId)).data.reviewedBy == request.auth.uid
+          && getAfter(/databases/$(database)/documents/organizations/$(orgId)/accessRequests/$(memberId)).data.userName == request.resource.data.name
+          && getAfter(/databases/$(database)/documents/organizations/$(orgId)/accessRequests/$(memberId)).data.approvedRole == request.resource.data.role
+          && exists(/databases/$(database)/documents/organizations/$(orgId)/keyProfiles/$(memberId))
+          && exists(/databases/$(database)/documents/organizations/$(orgId)/keyBackups/$(memberId));
+        // Only organization admins may change accessLevel; role, name, identity, and timestamps stay fixed.
+        allow update: if activeAdmin(orgId) && !maintenanceActive(orgId) && !maintenanceAfter(orgId)
+          && memberId == resource.data.userId
+          && validMemberAfterAccessLevelUpdate(request.resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['accessLevel'])
+          && request.resource.data.userId == resource.data.userId
+          && (!('name' in resource.data) || request.resource.data.name == resource.data.name)
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.status == resource.data.status
+          && request.resource.data.joinedAt == resource.data.joinedAt;
+        // Role-only swaps retain identity, authorship, status, access level, and encryption grants.
+        allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role'])
+          && request.resource.data.role != resource.data.role
+          && activeAdmin(orgId) && !maintenanceActive(orgId) && !maintenanceAfter(orgId)
+          && memberId != request.auth.uid && memberId == resource.data.userId
+          && resource.data.role in ['doctor', 'nurse'] && resource.data.status in ['active', 'inactive']
+          && validMemberAfterStatusUpdate(request.resource.data);
+        // Admins can deactivate/reactivate clinical members, but cannot change admin memberships here.
+        allow update: if activeAdmin(orgId)
+          && memberId == resource.data.userId
+          && resource.data.role in ['doctor', 'nurse']
+          && resource.data.status in ['active', 'inactive']
+          && validMemberAfterStatusUpdate(request.resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+          && request.resource.data.status != resource.data.status
+          && !maintenanceActive(orgId)
+          && ((request.resource.data.status == 'active' && !maintenanceAfter(orgId)) ||
+            (request.resource.data.status == 'inactive' && maintenanceAfter(orgId)
+              && getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyRotations/$(getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyMaintenance/current).data.rotationId)).data.removedUserId == memberId
+              && getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyRotations/$(getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyMaintenance/current).data.rotationId)).data.phase == 'preparing'))
+          && request.resource.data.userId == resource.data.userId
+          && ((!('name' in resource.data) && !('name' in request.resource.data))
+            || (('name' in resource.data)
+              && ('name' in request.resource.data)
+              && request.resource.data.name == resource.data.name))
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.accessLevel == resource.data.accessLevel
+          && request.resource.data.joinedAt == resource.data.joinedAt;
+        allow update: if verifiedUser() && request.auth.uid == memberId
+            && resource.data.userId == memberId && resource.data.status == 'active'
+            && resource.data.role in ['doctor', 'nurse']
+            && validMemberAfterLeave(request.resource.data)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'leftAt', 'leftDuringRotationId'])
+            && (!maintenanceActive(orgId) || get(/databases/$(database)/documents/organizations/$(orgId)/keyMaintenance/current).data.get('awaitingAdmin', false))
+            && maintenanceAfter(orgId)
+            && getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyMaintenance/current).data.get('awaitingAdmin', false)
+            && getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyMaintenance/current).data.rotationId == request.resource.data.leftDuringRotationId;
+        allow delete: if false;
+      }
+
+      match /accessRequests/{requestId} {
+        allow get: if validOrganizationCode(orgId)
+          && verifiedUser()
+          && (request.auth.uid == requestId || activeAdmin(orgId));
+        allow list: if validOrganizationCode(orgId)
+          && verifiedUser()
+          && (activeAdmin(orgId) || resource.data.userId == request.auth.uid);
+
+        allow create: if verifiedUser()
+          && organizationExists(orgId)
+          && request.auth.uid == requestId
+          && validAccessRequest(request.resource.data)
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.keys().hasAll(['userEmail'])
+          && request.resource.data.userEmail == request.auth.token.email
+          && request.resource.data.status == 'pending'
+          && request.resource.data.createdAt == request.time;
+
+        // A historical decision can be resubmitted without changing identity or request details.
+        // This separate, narrow grant keeps the owner path cheap to evaluate.
+        allow update: if request.auth != null && request.auth.token.email_verified == true
+          && request.auth.uid == requestId
+          && resource.data.userId == request.auth.uid
+          && resource.data.status in ['approved', 'rejected']
+          && request.resource.data.status == 'pending'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'createdAt'])
+          && request.resource.data.createdAt == request.time;
+
+        allow update: if (verifiedUser() && request.auth.uid == requestId
+            && resource.data.userId == request.auth.uid
+            && ((resource.data.status == 'pending' && request.resource.data.status == 'cancelled'
+                && validAccessRequest(request.resource.data)
+                && request.resource.data.cancelledAt == request.time
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt']))
+              || (resource.data.status == 'cancelled' && request.resource.data.status == 'pending'
+                && validAccessRequest(request.resource.data)
+                && request.resource.data.userId == resource.data.userId
+                && request.resource.data.userEmail == request.auth.token.email
+                && request.resource.data.createdAt == request.time
+                && !exists(/databases/$(database)/documents/organizations/$(orgId)/members/$(requestId))
+                && exists(/databases/$(database)/documents/organizations/$(orgId)/keyProfiles/$(requestId))
+                && exists(/databases/$(database)/documents/organizations/$(orgId)/keyBackups/$(requestId)))
+              ))
+          || (activeAdmin(orgId) && !maintenanceActive(orgId) && !maintenanceAfter(orgId)
+          && resource.data.status == 'pending'
+          && validAccessRequest(request.resource.data)
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.userName == resource.data.userName
+          && ((!('userEmail' in resource.data) && !('userEmail' in request.resource.data))
+            || (('userEmail' in resource.data)
+              && ('userEmail' in request.resource.data)
+              && request.resource.data.userEmail == resource.data.userEmail))
+          && request.resource.data.requestedRole == resource.data.requestedRole
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.status in ['approved', 'rejected']
+          && request.resource.data.reviewedBy == request.auth.uid
+          && request.resource.data.reviewedAt == request.time
+          && (request.resource.data.status == 'rejected'
+            || (validRole(request.resource.data.approvedRole)
+              && request.resource.data.approvedRole == getAfter(/databases/$(database)/documents/organizations/$(orgId)/members/$(resource.data.userId)).data.role)));
+        allow delete: if false;
+      }
+
+      // Per-organization public keys let admins prepare an envelope only for a user
+      // who requested access (or is already active). A profile is write-once so a
+      // member cannot silently replace the key after receiving an envelope.
+      match /keyProfiles/{userId} {
+        allow get: if validOrganizationCode(orgId)
+          && verifiedUser()
+          && (request.auth.uid == userId || activeAdmin(orgId));
+        allow list: if validOrganizationCode(orgId) && activeAdmin(orgId);
+        allow create: if verifiedUser()
+          && organizationExists(orgId)
+          && request.auth.uid == userId
+          && (exists(/databases/$(database)/documents/organizations/$(orgId)/accessRequests/$(userId))
+            || getAfter(/databases/$(database)/documents/organizations/$(orgId)/accessRequests/$(userId)).data.status == 'pending'
+            || activeMember(orgId))
+          && validMemberPublicKeyProfile(request.resource.data, userId)
+          && request.resource.data.createdAt == request.time;
+        allow update: if approvingKeyReplacement(orgId, userId)
+          && validMemberPublicKeyProfile(request.resource.data, userId)
+          && request.resource.data == getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyReplacementRequests/$(userId)).data.profile;
+        allow delete: if false;
+      }
+
+      match /keyReplacementRequests/{userId} {
+        function newPending(data) {
+          return validKeyReplacement(data, userId) && request.auth.uid == userId && clinicalKeyMember(orgId, userId)
+            && data.status == 'pending' && data.createdAt == request.time
+            && data.previousFingerprint == get(/databases/$(database)/documents/organizations/$(orgId)/keyProfiles/$(userId)).data.publicKeyFingerprint;
+        }
+        function resolution(data) {
+          return validKeyReplacement(data, userId) && resource.data.status == 'pending'
+            && data.diff(resource.data).affectedKeys().hasOnly(['status', 'resolvedBy', 'resolvedAt'])
+            && data.resolvedBy == request.auth.uid && data.resolvedAt == request.time;
+        }
+        function approvalCompanions(data) {
+          let profile = getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyProfiles/$(userId)).data;
+          let backup = getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyBackups/$(userId)).data;
+          let envelope = getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyEnvelopes/$(userId)).data;
+          let pin = getAfter(/databases/$(database)/documents/organizations/$(orgId)/rotationRecipients/$(userId)).data;
+          return data.previousFingerprint == get(/databases/$(database)/documents/organizations/$(orgId)/keyProfiles/$(userId)).data.publicKeyFingerprint
+            && profile == data.profile && backup == data.backup
+            && envelope.userId == userId && envelope.grantedBy == request.auth.uid && envelope.createdAt == request.time
+            && envelope.keyVersion == get(/databases/$(database)/documents/organizations/$(orgId)/keyMetadata/current).data.currentKeyVersion
+            && pin.adminId == request.auth.uid && pin.updatedAt == request.time;
+        }
+        allow get: if activeMember(orgId) && (request.auth.uid == userId || activeAdmin(orgId));
+        allow list: if activeAdmin(orgId);
+        allow create: if newPending(request.resource.data);
+        allow update: if (resource.data.status != 'pending' && request.resource.data.requestId != resource.data.requestId && newPending(request.resource.data))
+          || (resolution(request.resource.data) && (
+            (request.resource.data.status == 'cancelled' && request.auth.uid == userId && clinicalKeyMember(orgId, userId))
+            || (request.resource.data.status == 'rejected' && activeAdmin(orgId) && request.auth.uid != userId)
+            || (request.resource.data.status == 'approved' && replacementAdmin(orgId, userId) && approvalCompanions(request.resource.data))));
+        allow delete: if false;
+      }
+
+      match /keyBackups/{userId} {
+        allow get: if validOrganizationCode(orgId) && verifiedUser() && request.auth.uid == userId;
+        allow list: if false;
+        allow create: if verifiedUser()
+          && request.auth.uid == userId
+          && (exists(/databases/$(database)/documents/organizations/$(orgId)/accessRequests/$(userId))
+            || getAfter(/databases/$(database)/documents/organizations/$(orgId)/accessRequests/$(userId)).data.status == 'pending'
+            || activeMember(orgId))
+          && validPrivateKeyBackup(request.resource.data, userId)
+          && request.resource.data.updatedAt == request.time;
+        allow update: if (verifiedUser()
+          && request.auth.uid == userId
+          && activeMember(orgId)
+          && validPrivateKeyBackup(request.resource.data, userId)
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.updatedAt == request.time)
+          || (approvingKeyReplacement(orgId, userId) && validPrivateKeyBackup(request.resource.data, userId)
+            && request.resource.data == getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyReplacementRequests/$(userId)).data.backup);
+        allow delete: if false;
+      }
+
+      // Admin-only authenticated recipient pins. Ciphertext is encrypted under the
+      // recovery-derived admin control key, never the organization-wide DEK.
+      match /rotationRecipients/{userId} {
+        function validRecipientPin(data) {
+          return data.keys().hasOnly(['ciphertext', 'iv', 'adminId', 'schemaVersion', 'updatedAt'])
+            && data.keys().hasAll(['ciphertext', 'iv', 'adminId', 'schemaVersion', 'updatedAt'])
+            && data.ciphertext is string && data.ciphertext.size() >= 24 && data.ciphertext.size() <= 16384
+            && data.ciphertext.matches('^[A-Za-z0-9+/]+={0,2}$')
+            && data.iv is string && data.iv.matches('^[A-Za-z0-9+/]{16}$')
+            && data.adminId == request.auth.uid && data.schemaVersion == 1 && data.updatedAt == request.time;
+        }
+        allow get: if activeAdmin(orgId);
+        allow list, delete: if false;
+        allow create, update: if activeAdmin(orgId) && activeKeyRecipient(orgId, userId)
+          && validRecipientPin(request.resource.data)
+          && (!maintenanceAfter(orgId) || getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyMaintenance/current).data.get('awaitingAdmin', false)
+            || getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyRotations/$(getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyMaintenance/current).data.rotationId)).data.phase == 'preparing');
+      }
+
+      match /keyMaintenance/{maintenanceId} {
+        function validDepartureMaintenance(data) {
+          let member = getAfter(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data;
+          let admin = getAfter(/databases/$(database)/documents/organizations/$(orgId)/members/$(data.adminId)).data;
+          return data.keys().hasOnly(['active', 'awaitingAdmin', 'departedUserId', 'rotationId', 'adminId', 'completed', 'total', 'updatedAt'])
+            && data.keys().hasAll(['active', 'awaitingAdmin', 'departedUserId', 'rotationId', 'adminId', 'completed', 'total', 'updatedAt'])
+            && data.active == true && data.awaitingAdmin == true && data.departedUserId == request.auth.uid
+            && data.rotationId is string && data.rotationId.matches('^[A-Za-z0-9_-]{22}$')
+            && data.adminId is string && data.adminId.size() > 0 && data.adminId.size() <= 128
+            && data.adminId == get(/databases/$(database)/documents/organizations/$(orgId)/keyMetadata/current).data.updatedBy
+            && validActiveMembership(admin, data.adminId) && admin.role == 'admin'
+            && data.completed == 0 && data.total == 0 && data.updatedAt == request.time
+            && member.status == 'left' && member.leftAt == request.time && member.leftDuringRotationId == data.rotationId
+            && !existsAfter(/databases/$(database)/documents/organizations/$(orgId)/keyRotations/$(data.rotationId));
+        }
+        function validMaintenance(data) {
+          return data.keys().hasOnly(['active', 'rotationId', 'adminId', 'completed', 'total', 'updatedAt', 'awaitingAdmin'])
+            && data.keys().hasAll(['active', 'rotationId', 'adminId', 'completed', 'total', 'updatedAt'])
+            && data.active is bool && data.rotationId is string && data.rotationId.matches('^[A-Za-z0-9_-]{22}$')
+            && data.adminId == request.auth.uid && data.get('awaitingAdmin', false) == false && data.completed is int && data.total is int
+            && data.completed >= 0 && data.total >= 1 && data.total <= 500 && data.completed <= data.total
+            && data.updatedAt == request.time;
+        }
+        function matchesRotation(data) {
+          let rotation = getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyRotations/$(data.rotationId)).data;
+          return rotation.adminId == data.adminId && rotation.nextIndex == data.completed
+            && rotation.recipientCount == data.total
+            && data.active == (rotation.phase != 'completed');
+        }
+        allow get: if maintenanceId == 'current' && activeMember(orgId);
+        allow list, delete: if false;
+        allow create, update: if maintenanceId == 'current' && activeMember(orgId)
+          && get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.role in ['doctor', 'nurse']
+          && !maintenanceActive(orgId) && validDepartureMaintenance(request.resource.data);
+        allow create: if maintenanceId == 'current' && activeAdmin(orgId)
+          && validMaintenance(request.resource.data) && request.resource.data.active
+          && request.resource.data.completed == 0 && matchesRotation(request.resource.data)
+          && !exists(/databases/$(database)/documents/organizations/$(orgId)/keyRotations/$(request.resource.data.rotationId));
+        allow update: if maintenanceId == 'current' && activeAdmin(orgId)
+          && validMaintenance(request.resource.data) && matchesRotation(request.resource.data)
+          && ((resource.data.active && request.resource.data.rotationId == resource.data.rotationId
+                && request.resource.data.adminId == resource.data.adminId)
+            || (!resource.data.active && request.resource.data.active && request.resource.data.completed == 0
+                && !exists(/databases/$(database)/documents/organizations/$(orgId)/keyRotations/$(request.resource.data.rotationId))));
+      }
+
+      match /keyRotations/{rotationId} {
+        function validRotation(data) {
+          return rotationId.matches('^[A-Za-z0-9_-]{22}$')
+            && data.keys().hasOnly(['adminId', 'removedUserId', 'baseVersion', 'targetVersion', 'phase', 'recipients',
+                'recipientCount', 'nextIndex', 'ciphertext', 'iv', 'createdAt', 'updatedAt'])
+            && data.keys().hasAll(['adminId', 'removedUserId', 'baseVersion', 'targetVersion', 'phase', 'recipients',
+                'recipientCount', 'nextIndex', 'ciphertext', 'iv', 'createdAt', 'updatedAt'])
+            && data.adminId == request.auth.uid && data.removedUserId is string
+            && (data.removedUserId == '' || data.removedUserId.matches('^[A-Za-z0-9_-]{1,128}$'))
+            && data.removedUserId != data.adminId
+            && data.baseVersion is int && data.baseVersion >= 1 && data.baseVersion < 1000000
+            && data.targetVersion == data.baseVersion + 1 && data.phase in ['preparing', 'wrapping', 'completed']
+            && data.recipients is list && data.recipients.size() >= 1 && data.recipients.size() <= 500
+            && data.recipientCount == data.recipients.size() && data.recipients.toSet().size() == data.recipientCount
+            && data.recipients.hasAny([data.adminId]) && !data.recipients.hasAny([data.removedUserId])
+            && data.nextIndex is int && data.nextIndex >= 0 && data.nextIndex <= data.recipientCount
+            && data.ciphertext is string && data.ciphertext.size() >= 24 && data.ciphertext.size() <= 900000
+            && data.ciphertext.matches('^[A-Za-z0-9+/]+={0,2}$')
+            && data.iv is string && data.iv.matches('^[A-Za-z0-9+/]{16}$')
+            && data.createdAt is timestamp && data.updatedAt == request.time;
+        }
+        function boundMaintenance() {
+          let status = getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyMaintenance/current).data;
+          return status.rotationId == rotationId && status.adminId == request.auth.uid
+            && status.completed == request.resource.data.nextIndex && status.total == request.resource.data.recipientCount
+            && status.active == (request.resource.data.phase != 'completed');
+        }
+        function validProgress(data) {
+          let uid = resource.data.recipients[resource.data.nextIndex];
+          let grant = getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyRotations/$(rotationId)/grants/$(uid)).data;
+          return data.phase == 'wrapping' && data.nextIndex == resource.data.nextIndex + 1
+            && !exists(/databases/$(database)/documents/organizations/$(orgId)/keyRotations/$(rotationId)/grants/$(uid))
+            && grant.index == resource.data.nextIndex && grant.userId == uid && grant.keyVersion == data.targetVersion
+            && data.diff(resource.data).affectedKeys().hasOnly(['nextIndex', 'updatedAt']);
+        }
+        allow get: if activeAdmin(orgId);
+        allow list, delete: if false;
+        allow create: if activeAdmin(orgId) && validRotation(request.resource.data) && boundMaintenance()
+          && (!maintenanceActive(orgId) ||
+            (get(/databases/$(database)/documents/organizations/$(orgId)/keyMaintenance/current).data.get('awaitingAdmin', false)
+              && get(/databases/$(database)/documents/organizations/$(orgId)/keyMaintenance/current).data.rotationId == rotationId
+              && request.resource.data.removedUserId == ''))
+          && request.resource.data.phase == 'preparing' && request.resource.data.nextIndex == 0
+          && request.resource.data.createdAt == request.time
+          && get(/databases/$(database)/documents/organizations/$(orgId)/keyMetadata/current).data.currentKeyVersion == request.resource.data.baseVersion
+          && (request.resource.data.removedUserId == '' ||
+            (get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.resource.data.removedUserId)).data.status == 'active'
+              && getAfter(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.resource.data.removedUserId)).data.status == 'inactive'));
+        allow update: if activeAdmin(orgId) && validRotation(request.resource.data) && boundMaintenance()
+          && maintenanceActive(orgId) && resource.data.adminId == request.auth.uid
+          && get(/databases/$(database)/documents/organizations/$(orgId)/keyMaintenance/current).data.rotationId == rotationId
+          && request.resource.data.adminId == resource.data.adminId
+          && request.resource.data.removedUserId == resource.data.removedUserId
+          && request.resource.data.baseVersion == resource.data.baseVersion
+          && request.resource.data.targetVersion == resource.data.targetVersion
+          && request.resource.data.createdAt == resource.data.createdAt
+          && ((resource.data.phase == 'preparing' && request.resource.data.phase == 'wrapping'
+                && request.resource.data.nextIndex == 0
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phase', 'recipients', 'recipientCount', 'ciphertext', 'iv', 'updatedAt']))
+            || (resource.data.phase == 'wrapping' && resource.data.nextIndex < resource.data.recipientCount && validProgress(request.resource.data))
+            || (resource.data.phase == 'wrapping' && request.resource.data.phase == 'completed'
+                && resource.data.nextIndex == resource.data.recipientCount
+                && getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyMetadata/current).data.currentKeyVersion == resource.data.targetVersion
+                && getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyMetadata/current).data.rotationId == rotationId
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phase', 'updatedAt'])));
+
+        match /grants/{userId} {
+          function validStagedGrant(data) {
+            return data.keys().hasOnly(['userId', 'keyVersion', 'wrappedKey', 'algorithm', 'grantedBy', 'createdAt', 'index', 'proofCiphertext', 'proofIv'])
+              && data.keys().hasAll(['userId', 'keyVersion', 'wrappedKey', 'algorithm', 'grantedBy', 'createdAt', 'index', 'proofCiphertext', 'proofIv'])
+              && data.userId == userId && data.keyVersion is int && data.keyVersion >= 2 && data.keyVersion <= 1000000
+              && data.wrappedKey is string && data.wrappedKey.size() > 0 && data.wrappedKey.size() <= 2048
+              && data.wrappedKey.matches('^[A-Za-z0-9+/]+={0,2}$')
+              && data.algorithm == 'RSA-OAEP-3072-SHA256' && data.grantedBy == request.auth.uid
+              && data.index is int && data.index >= 0 && data.index < 500
+              && data.proofCiphertext is string && data.proofCiphertext.size() >= 24 && data.proofCiphertext.size() <= 8192
+              && data.proofCiphertext.matches('^[A-Za-z0-9+/]+={0,2}$')
+              && data.proofIv is string && data.proofIv.matches('^[A-Za-z0-9+/]{16}$') && data.createdAt == request.time;
+          }
+          function activeRotationSlot(data) {
+            let before = get(/databases/$(database)/documents/organizations/$(orgId)/keyRotations/$(rotationId)).data;
+            let after = getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyRotations/$(rotationId)).data;
+            return before.phase == 'wrapping' && before.adminId == request.auth.uid && before.nextIndex == data.index
+              && before.recipients[data.index] == userId && before.targetVersion == data.keyVersion
+              && after.nextIndex == data.index + 1
+              && get(/databases/$(database)/documents/organizations/$(orgId)/keyMaintenance/current).data.rotationId == rotationId;
+          }
+          allow get: if activeAdmin(orgId) || (activeMember(orgId) && request.auth.uid == userId
+            && !maintenanceActive(orgId)
+            && get(/databases/$(database)/documents/organizations/$(orgId)/keyMetadata/current).data.rotationId == rotationId
+            && (!exists(/databases/$(database)/documents/organizations/$(orgId)/keyRotations/$(rotationId)/grants/$(userId))
+              || get(/databases/$(database)/documents/organizations/$(orgId)/keyMetadata/current).data.currentKeyVersion == resource.data.keyVersion));
+          allow list, update, delete: if false;
+          allow create: if activeAdmin(orgId) && activeKeyRecipient(orgId, userId)
+            && maintenanceActive(orgId) && validStagedGrant(request.resource.data) && activeRotationSlot(request.resource.data);
+        }
+      }
+
+      match /keyMetadata/{metadataId} {
+        allow get: if metadataId == 'current' && activeMember(orgId);
+        allow list: if false;
+        allow create: if metadataId == 'current'
+          && activeAdmin(orgId)
+          && validKeyMetadata(request.resource.data)
+          && request.resource.data.currentKeyVersion == 1
+          && request.resource.data.updatedAt == request.time;
+        allow update: if metadataId == 'current'
+          && activeAdmin(orgId) && validKeyMetadata(request.resource.data)
+          && maintenanceActive(orgId) && !maintenanceAfter(orgId)
+          && request.resource.data.currentKeyVersion == resource.data.currentKeyVersion + 1
+          && request.resource.data.rotationId == get(/databases/$(database)/documents/organizations/$(orgId)/keyMaintenance/current).data.rotationId
+          && getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyRotations/$(request.resource.data.rotationId)).data.phase == 'completed'
+          && getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyHistory/$(string(resource.data.currentKeyVersion))).data.wrappingVersion == request.resource.data.currentKeyVersion
+          && get(/databases/$(database)/documents/organizations/$(orgId)/keyRotations/$(request.resource.data.rotationId)/grants/$(request.auth.uid)).data.keyVersion == request.resource.data.currentKeyVersion
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentKeyVersion', 'updatedAt', 'updatedBy', 'rotationId']);
+        allow delete: if false;
+      }
+
+      match /keyHistory/{versionId} {
+        function validHistory(data) {
+          return data.keys().hasOnly(['keyVersion', 'wrappingVersion', 'ciphertext', 'iv', 'createdBy', 'createdAt'])
+            && data.keys().hasAll(['keyVersion', 'wrappingVersion', 'ciphertext', 'iv', 'createdBy', 'createdAt'])
+            && data.keyVersion is int && data.keyVersion >= 1 && data.keyVersion < 1000000
+            && versionId == string(data.keyVersion)
+            && data.wrappingVersion == data.keyVersion + 1
+            && data.ciphertext is string && data.ciphertext.size() >= 24 && data.ciphertext.size() <= 256
+            && data.ciphertext.matches('^[A-Za-z0-9+/]+={0,2}$')
+            && data.iv is string && data.iv.matches('^[A-Za-z0-9+/]{16}$')
+            && data.createdBy == request.auth.uid && data.createdAt == request.time;
+        }
+        allow read: if activeMember(orgId);
+        allow create: if activeAdmin(orgId) && validHistory(request.resource.data)
+          && get(/databases/$(database)/documents/organizations/$(orgId)/keyMetadata/current).data.currentKeyVersion == request.resource.data.keyVersion
+          && getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyMetadata/current).data.currentKeyVersion == request.resource.data.wrappingVersion;
+        allow update, delete: if false;
+      }
+
+      match /keyEnvelopes/{userId} {
+        allow get: if activeMember(orgId)
+          && (request.auth.uid == userId || activeAdmin(orgId));
+        allow list: if activeAdmin(orgId);
+        allow create: if activeAdmin(orgId) && !maintenanceActive(orgId) && !maintenanceAfter(orgId)
+          && activeKeyRecipient(orgId, userId)
+          && validKeyEnvelope(request.resource.data, userId)
+          && request.resource.data.createdAt == request.time
+          && getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyMetadata/current).data.currentKeyVersion
+            == request.resource.data.keyVersion;
+        allow update: if activeAdmin(orgId) && !maintenanceActive(orgId) && !maintenanceAfter(orgId)
+          && activeKeyRecipient(orgId, userId)
+          && validKeyEnvelope(request.resource.data, userId)
+          && request.resource.data.createdAt == request.time
+          && (request.resource.data.keyVersion > resource.data.keyVersion || approvingKeyReplacement(orgId, userId))
+          && request.resource.data.userId == resource.data.userId
+          && getAfter(/databases/$(database)/documents/organizations/$(orgId)/keyMetadata/current).data.currentKeyVersion
+            == request.resource.data.keyVersion;
+        allow delete: if false;
+      }
+
+      // Active admins, doctors, and nurses can use clinical rosters. Ward setup
+      // and configuration are admin-only; woman admissions are created by clinicians.
+      match /wards/{wardId} {
+        function validRosterEnvelope(data) {
+          return data.keys().hasOnly(['ciphertext', 'iv', 'keyVersion', 'algorithm', 'schemaVersion', 'createdBy', 'createdAt'])
+            && data.keys().hasAll(['ciphertext', 'iv', 'keyVersion', 'algorithm', 'schemaVersion', 'createdBy', 'createdAt'])
+            && data.ciphertext is string && data.ciphertext.size() > 0 && data.ciphertext.size() <= 16384
+            && data.ciphertext.matches('^[A-Za-z0-9+/]+={0,2}$')
+            && data.iv is string && data.iv.matches('^[A-Za-z0-9+/]{16}$')
+            && currentDataKey(orgId, data.keyVersion) && data.algorithm == 'AES-GCM' && data.schemaVersion == 1
+            && data.createdBy == request.auth.uid && data.createdAt is timestamp;
+        }
+        allow get, list: if activeClinicalMember(orgId);
+        allow create: if activeAdmin(orgId) && validRosterEnvelope(request.resource.data)
+          && request.resource.data.createdAt == request.time;
+        allow update: if activeAdmin(orgId) && validRosterEnvelope(request.resource.data)
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'ciphertext', 'iv', 'keyVersion', 'algorithm', 'schemaVersion', 'createdBy', 'createdAt'
+          ]);
+        allow delete: if false;
+      }
+      match /women/{womanId} {
+        function validRosterEnvelope(data) {
+          return data.keys().hasOnly(['ciphertext', 'iv', 'keyVersion', 'algorithm', 'schemaVersion', 'createdBy', 'createdAt', 'archived', 'archiveRevision', 'lastArchiveEventId'])
+            && data.keys().hasAll(['ciphertext', 'iv', 'keyVersion', 'algorithm', 'schemaVersion', 'createdBy', 'createdAt'])
+            && data.ciphertext is string && data.ciphertext.size() > 0 && data.ciphertext.size() <= 16384
+            && data.ciphertext.matches('^[A-Za-z0-9+/]+={0,2}$')
+            && data.iv is string && data.iv.matches('^[A-Za-z0-9+/]{16}$')
+            // Archive updates preserve the immutable envelope, which can use a historical key.
+            && data.keyVersion is int && data.keyVersion >= 1 && data.keyVersion <= 1000000
+            && data.keyVersion <= get(/databases/$(database)/documents/organizations/$(orgId)/keyMetadata/current).data.currentKeyVersion
+            && data.algorithm == 'AES-GCM' && data.schemaVersion == 1
+            && data.createdBy is string && data.createdAt is timestamp;
+        }
+        function validArchiveTransition(data) {
+          let event = getAfter(/databases/$(database)/documents/organizations/$(orgId)/rosterArchiveEvents/$(data.lastArchiveEventId)).data;
+          return validRosterEnvelope(data)
+            && data.archived is bool && data.archived != resource.data.get('archived', false)
+            && data.archiveRevision is int && data.archiveRevision == resource.data.get('archiveRevision', 0) + 1
+            && data.archiveRevision <= 2147483647
+            && data.lastArchiveEventId is string && data.lastArchiveEventId.matches('^[A-Za-z0-9_-]{1,128}$')
+            && data.diff(resource.data).affectedKeys().hasOnly(['archived', 'archiveRevision', 'lastArchiveEventId'])
+            && !exists(/databases/$(database)/documents/organizations/$(orgId)/rosterArchiveEvents/$(data.lastArchiveEventId))
+            && event.womanDocumentId == womanId && event.archived == data.archived
+            && event.revision == data.archiveRevision && event.createdBy == request.auth.uid
+            && event.createdAt == request.time;
+        }
+        allow get, list: if activeClinicalMember(orgId);
+        allow create: if writableClinicalMember(orgId) && validRosterEnvelope(request.resource.data)
+          && currentDataKey(orgId, request.resource.data.keyVersion)
+          && request.resource.data.keys().hasOnly(['ciphertext', 'iv', 'keyVersion', 'algorithm', 'schemaVersion', 'createdBy', 'createdAt'])
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.createdAt == request.time;
+        allow update: if canManageWomanArchive(orgId) && validArchiveTransition(request.resource.data);
+        allow delete: if false;
+      }
+
+      // Archive status and immutable audit event must be committed together. Names remain encrypted.
+      match /rosterArchiveEvents/{eventId} {
+        function validArchiveEvent(data) {
+          let before = get(/databases/$(database)/documents/organizations/$(orgId)/women/$(data.womanDocumentId)).data;
+          let after = getAfter(/databases/$(database)/documents/organizations/$(orgId)/women/$(data.womanDocumentId)).data;
+          return data.keys().hasOnly(['womanDocumentId', 'archived', 'revision', 'createdBy', 'accessLevel', 'createdAt',
+              'ciphertext', 'iv', 'keyVersion', 'algorithm', 'schemaVersion'])
+            && data.keys().hasAll(['womanDocumentId', 'archived', 'revision', 'createdBy', 'accessLevel', 'createdAt',
+              'ciphertext', 'iv', 'keyVersion', 'algorithm', 'schemaVersion'])
+            && data.womanDocumentId is string && data.womanDocumentId.matches('^[A-Za-z0-9_-]{1,128}$')
+            && data.archived is bool && data.archived != before.get('archived', false)
+            && data.revision is int && data.revision == before.get('archiveRevision', 0) + 1
+            && data.revision <= 2147483647
+            && after.archived == data.archived && after.archiveRevision == data.revision && after.lastArchiveEventId == eventId
+            && data.createdBy == request.auth.uid
+            && data.accessLevel == get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.accessLevel
+            && data.createdAt == request.time
+            && data.ciphertext is string && data.ciphertext.size() >= 24 && data.ciphertext.size() <= 4096
+            && data.ciphertext.matches('^[A-Za-z0-9+/]+={0,2}$')
+            && data.iv is string && data.iv.matches('^[A-Za-z0-9+/]{16}$')
+            && currentDataKey(orgId, data.keyVersion) && data.algorithm == 'AES-GCM' && data.schemaVersion == 2;
+        }
+        allow get, list: if activeClinicalMember(orgId);
+        allow create: if canManageWomanArchive(orgId) && validArchiveEvent(request.resource.data);
+        allow update, delete: if false;
+      }
+
+      // Isolated fake-data sync demonstrator for already-approved clinical staff.
+      // The client manually shares a synthetic key; do not use this as key delivery.
+      match /clinicalData/{dataVersion}/observations/{observationId} {
+        allow get, list: if dataVersion == 'v1'
+          && observationId == 'latest'
+          && activeClinicalMember(orgId);
+        allow create: if dataVersion == 'v1'
+          && observationId == 'latest'
+          && writableClinicalMember(orgId)
+          && validSyntheticObservation(request.resource.data)
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.createdAt == request.time;
+        allow update: if dataVersion == 'v1'
+          && observationId == 'latest'
+          && writableClinicalMember(orgId)
+          && resource.data.createdBy == request.auth.uid
+          && validSyntheticObservation(request.resource.data)
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.createdAt == request.time;
+        allow delete: if false;
+      }
+
+      // Synthetic Labour Care Guide demo only. Documents contain an AES-GCM envelope;
+      // the complete observation (including its synthetic label) is client-encrypted.
+      match /clinicalData/{dataVersion}/chartStarts/{womanId} {
+        function validChartStart(data) {
+          return data.keys().hasOnly(['startMillis', 'womanDocumentId', 'sessionId'])
+            && data.keys().hasAll(['startMillis', 'womanDocumentId', 'sessionId'])
+            && data.startMillis is number && data.startMillis >= 0 && data.startMillis <= request.time.toMillis()
+            && womanId.matches('^[A-Za-z0-9_-]{1,128}$') && data.womanDocumentId == womanId
+            && data.sessionId is string && data.sessionId.size() > 0 && data.sessionId.size() <= 256
+            && get(/databases/$(database)/documents/organizations/$(orgId)/women/$(womanId)).data.get('archived', false) == false;
+        }
+        allow read: if dataVersion == 'v1' && activeClinicalMember(orgId);
+        allow create: if dataVersion == 'v1' && writableClinicalMember(orgId) && validChartStart(request.resource.data);
+        allow update: if dataVersion == 'v1' && writableClinicalMember(orgId) && validChartStart(request.resource.data)
+          && request.resource.data == resource.data;
+      }
+      match /clinicalData/{dataVersion}/lcgObservations/{observationId} {
+        function validEnvelope(data) {
+          return data.ciphertext is string
+            && data.ciphertext.size() > 0
+            && data.ciphertext.size() <= 16384
+            && data.ciphertext.matches('^[A-Za-z0-9+/]+={0,2}$')
+            && data.iv is string
+            && data.iv.matches('^[A-Za-z0-9+/]{16}$')
+            && currentDataKey(orgId, data.keyVersion)
+            && data.algorithm == 'AES-GCM'
+            && data.schemaVersion == 2
+            && data.createdBy == request.auth.uid
+            && validAccessLevel(data.accessLevel)
+            && data.createdAt is timestamp;
+        }
+
+        function validCellKey(key) {
+          return key is string && key.matches('^[A-Za-z][A-Za-z0-9]{0,39}$')
+            && key != 'initials' && key != 'partographMark'
+            && (!key.matches('.*Half1$') || key in ['fetalHeartRateHalf1', 'fhrDecelerationHalf1', 'contractionFrequencyHalf1', 'contractionDurationHalf1', 'oxytocinHalf1']);
+        }
+
+        function validCellKeys(data) {
+          let keys = data.cellKeys;
+          return keys is list && keys.size() >= 1 && keys.size() <= 4
+            && keys.toSet().size() == keys.size()
+            && validCellKey(keys[0])
+            && (keys.size() < 2 || validCellKey(keys[1]))
+            && (keys.size() < 3 || validCellKey(keys[2]))
+            && (keys.size() < 4 || validCellKey(keys[3]))
+            && (data.cellKey == 'partographMark' || keys == [data.cellKey]);
+        }
+
+        function validCellEvent(data) {
+          return data.keys().hasOnly([
+              'ciphertext', 'iv', 'keyVersion', 'algorithm', 'schemaVersion', 'createdBy', 'createdAt',
+              'accessLevel', 'recordType', 'womanDocumentId', 'columnId', 'cellKey', 'cellKeys', 'revision', 'reasonCiphertext', 'reasonIv', 'correctedRevision', 'observationTimeMillis', 'chartStartMillis', 'chartColumnIndex'
+            ])
+            && data.keys().hasAll([
+              'ciphertext', 'iv', 'keyVersion', 'algorithm', 'schemaVersion', 'createdBy', 'createdAt',
+              'accessLevel', 'recordType', 'womanDocumentId', 'columnId', 'cellKey', 'cellKeys', 'revision', 'observationTimeMillis'
+            ])
+            && validEnvelope(data)
+            && data.observationTimeMillis is number && data.observationTimeMillis >= 0 && data.observationTimeMillis <= request.time.toMillis()
+            && (data.recordType == 'cell'
+              ? !data.keys().hasAny(['reasonCiphertext', 'reasonIv', 'correctedRevision'])
+              : data.recordType == 'cellCorrection' && validCellCorrectionReason(data))
+            && data.columnId is string && data.columnId.size() > 0 && data.columnId.size() <= 256
+            && data.cellKey is string && data.cellKey.matches('^[A-Za-z][A-Za-z0-9]{0,39}$')
+            && data.cellKey != 'initials'
+            && validCellKeys(data)
+            && data.revision is int && data.revision > 0 && data.revision <= 2147483647;
+        }
+
+        function validCellCorrectionReason(data) {
+          return data.keys().hasAll(['reasonCiphertext', 'reasonIv', 'correctedRevision'])
+            && data.reasonCiphertext is string && data.reasonCiphertext.size() >= 24
+            && data.reasonCiphertext.size() <= 8192
+            && data.reasonCiphertext.matches('^[A-Za-z0-9+/]+={0,2}$')
+            && data.reasonIv is string && data.reasonIv.matches('^[A-Za-z0-9+/]{16}$')
+            && data.correctedRevision is int && data.correctedRevision > 0;
+        }
+
+        function validConfirmationEvent(data) {
+          return data.keys().hasOnly([
+              'ciphertext', 'iv', 'keyVersion', 'algorithm', 'schemaVersion', 'createdBy', 'createdAt',
+              'accessLevel', 'recordType', 'womanDocumentId', 'columnId', 'cellKey', 'cellKeys', 'revision'
+            ])
+            && data.keys().hasAll([
+              'ciphertext', 'iv', 'keyVersion', 'algorithm', 'schemaVersion', 'createdBy', 'createdAt',
+              'accessLevel', 'recordType', 'womanDocumentId', 'columnId', 'cellKey', 'cellKeys', 'revision'
+            ])
+            && validEnvelope(data)
+            && data.recordType == 'confirmation'
+            && data.columnId is string && data.columnId.size() > 0 && data.columnId.size() <= 256
+            && data.cellKey == 'initials'
+            && data.cellKeys is list && data.cellKeys.size() >= 1 && data.cellKeys.size() <= 3
+            && data.cellKeys.hasAll(['initials']) && data.cellKeys.hasOnly(['initials', 'fullDilationConfirmed', 'birthConfirmed'])
+            && data.cellKeys.toSet().size() == data.cellKeys.size()
+            && data.revision is int && data.revision > 0 && data.revision <= 2147483647;
+        }
+
+        function scheduledEventMatches(data, column) {
+          let chart = getAfter(/databases/$(database)/documents/organizations/$(orgId)/clinicalData/v1/chartStarts/$(column.womanDocumentId)).data;
+          let secondHalf = data.cellKeys.hasAny(['fetalHeartRateHalf2', 'fhrDecelerationHalf2', 'contractionFrequencyHalf2', 'contractionDurationHalf2', 'oxytocinHalf2', 'amnioticFluidHalf2', 'mouldingHalf2', 'cervicalDilationHalf2', 'descentHalf2', 'pulseHalf2', 'systolicHalf2', 'diastolicHalf2', 'temperatureHalf2']);
+          return data.chartStartMillis == chart.startMillis && data.chartColumnIndex is int && data.chartColumnIndex >= 0 && data.chartColumnIndex <= 2147483647
+            && data.observationTimeMillis == chart.startMillis + data.chartColumnIndex * 3600000 + (secondHalf ? 1800000 : 0);
+        }
+        function cellEventMatchesColumn(data) {
+          let column = getAfter(/databases/$(database)/documents/organizations/$(orgId)/clinicalData/v1/lcgColumns/$(data.columnId)).data;
+          let member = get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data;
+          return existsAfter(/databases/$(database)/documents/organizations/$(orgId)/clinicalData/v1/lcgColumns/$(data.columnId))
+            && (!exists(/databases/$(database)/documents/organizations/$(orgId)/clinicalData/v1/lcgColumns/$(data.columnId))
+              || get(/databases/$(database)/documents/organizations/$(orgId)/clinicalData/v1/lcgColumns/$(data.columnId)).data.revision < column.revision)
+            && (data.recordType != 'cellCorrection' || column.confirmed)
+            && (!data.keys().hasAny(['chartStartMillis', 'chartColumnIndex']) || scheduledEventMatches(data, column))
+            && data.womanDocumentId == column.womanDocumentId
+            && column.lastEventId == observationId
+            && column.revision == data.revision
+            && column.lastEditorUid == request.auth.uid
+            && column.lastEditorAccessLevel == member.accessLevel
+            && data.accessLevel == member.accessLevel;
+        }
+
+        function confirmationMatchesColumn(data) {
+          let column = getAfter(/databases/$(database)/documents/organizations/$(orgId)/clinicalData/v1/lcgColumns/$(data.columnId)).data;
+          return existsAfter(/databases/$(database)/documents/organizations/$(orgId)/clinicalData/v1/lcgColumns/$(data.columnId))
+            && get(/databases/$(database)/documents/organizations/$(orgId)/clinicalData/v1/lcgColumns/$(data.columnId)).data.revision < column.revision
+            && data.womanDocumentId == column.womanDocumentId
+            && column.confirmed
+            && column.confirmationEventId == observationId
+            && column.confirmedBy == request.auth.uid
+            && column.revision == data.revision
+            && data.accessLevel == get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.accessLevel;
+        }
+
+        function projectionMatches(data, key) {
+          let projection = getAfter(/databases/$(database)/documents/organizations/$(orgId)/clinicalData/v1/lcgCells/$(data.columnId + '~' + key)).data;
+          // The projection's own validator checks equality with this immutable event.
+          return projection.sourceEventId == observationId && projection.cellKey == key;
+        }
+        function allProjectionsMatch(data) {
+          return projectionMatches(data, data.cellKeys[0])
+            && (data.cellKeys.size() < 2 || projectionMatches(data, data.cellKeys[1]))
+            && (data.cellKeys.size() < 3 || projectionMatches(data, data.cellKeys[2]))
+            && (data.cellKeys.size() < 4 || projectionMatches(data, data.cellKeys[3]));
+        }
+
+        allow get, list: if dataVersion == 'v1' && activeClinicalMember(orgId);
+        allow create: if dataVersion == 'v1'
+          && allProjectionsMatch(request.resource.data)
+          && writableClinicalMember(orgId)
+          && request.resource.data.createdAt == request.time
+          && ((validCellEvent(request.resource.data) && cellEventMatchesColumn(request.resource.data))
+              || (validConfirmationEvent(request.resource.data) && confirmationMatchesColumn(request.resource.data)));
+        allow update, delete: if false;
+      }
+
+      // Column state contains authorization metadata only, never patient content.
+      // Cell and confirmation events are atomically appended in lcgObservations.
+      match /clinicalData/{dataVersion}/lcgCells/{projectionId} {
+        function validProjection(data) {
+          let event = getAfter(/databases/$(database)/documents/organizations/$(orgId)/clinicalData/v1/lcgObservations/$(data.sourceEventId)).data;
+          return data.keys().hasOnly(['sourceEventId', 'columnId', 'womanDocumentId', 'cellKey', 'event'])
+            && data.keys().hasAll(['sourceEventId', 'columnId', 'womanDocumentId', 'cellKey', 'event'])
+            && data.sourceEventId is string && data.sourceEventId.matches('^[A-Za-z0-9_-]{1,128}$')
+            && data.columnId is string && data.columnId.size() > 0 && data.columnId.size() <= 256
+            && data.womanDocumentId == event.womanDocumentId
+            && data.cellKey is string && data.cellKey.matches('^[A-Za-z][A-Za-z0-9]{0,39}$')
+            && projectionId == data.columnId + '~' + data.cellKey
+            && data.event == event && event.columnId == data.columnId && event.cellKeys.hasAny([data.cellKey])
+            && event.createdBy == request.auth.uid && event.createdAt == request.time
+            && !exists(/databases/$(database)/documents/organizations/$(orgId)/clinicalData/v1/lcgObservations/$(data.sourceEventId));
+        }
+        allow read: if dataVersion == 'v1' && activeClinicalMember(orgId);
+        allow create: if dataVersion == 'v1' && writableClinicalMember(orgId) && validProjection(request.resource.data);
+        allow update: if dataVersion == 'v1' && writableClinicalMember(orgId) && validProjection(request.resource.data)
+          && request.resource.data.columnId == resource.data.columnId
+          && request.resource.data.womanDocumentId == resource.data.womanDocumentId
+          && request.resource.data.cellKey == resource.data.cellKey
+          && request.resource.data.event.revision > resource.data.event.revision;
+        allow delete: if false;
+      }
+
+      match /clinicalData/{dataVersion}/lcgColumns/{columnId} {
+        function memberAccessLevel() {
+          return get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.accessLevel;
+        }
+
+        function freshEventExistsAfter(eventId) {
+          return eventId is string && eventId.matches('^[A-Za-z0-9_-]{1,128}$')
+            && !exists(/databases/$(database)/documents/organizations/$(orgId)/clinicalData/v1/lcgObservations/$(eventId))
+            && existsAfter(/databases/$(database)/documents/organizations/$(orgId)/clinicalData/v1/lcgObservations/$(eventId));
+        }
+
+        // Only the event's touched cells may acquire access metadata. Older
+        // columns without metadata start empty. Run the trusted historical
+        // migration before rollout to enforce old permissions on the server.
+        // Header records stay editable; grid records retain access and confirmation locks.
+        function isHeaderColumn() {
+          return columnId.matches('^header-.+$');
+        }
+
+        function validCellAccess(data, previous) {
+          let event = getAfter(/databases/$(database)/documents/organizations/$(orgId)/clinicalData/v1/lcgObservations/$(data.lastEventId)).data;
+          let keys = event.cellKeys;
+          let levels = data.cellAccessLevels;
+          let access = memberAccessLevel();
+          return event.recordType in ['cell', 'cellCorrection']
+            && (event.recordType != 'cellCorrection' || (resource.data.confirmed && event.correctedRevision == resource.data.revision))
+            && event.columnId == columnId
+            && event.revision == data.revision && event.createdBy == request.auth.uid
+            && event.accessLevel == access && event.createdAt == request.time
+            && (data.get('timestampMillis', null) == null || event.observationTimeMillis == data.timestampMillis
+                + (keys.hasAny(['fetalHeartRateHalf2', 'fhrDecelerationHalf2', 'contractionFrequencyHalf2', 'contractionDurationHalf2', 'oxytocinHalf2', 'amnioticFluidHalf2', 'mouldingHalf2', 'cervicalDilationHalf2', 'descentHalf2', 'pulseHalf2', 'systolicHalf2', 'diastolicHalf2', 'temperatureHalf2']) ? 1800000 : 0))
+            && levels is map && levels.size() <= 256
+            && keys is list && keys.size() >= 1 && keys.size() <= 4
+            && (!isHeaderColumn() || keys.hasOnly(['patientLabel', 'parity', 'labourOnset', 'activeLabourDiagnosis', 'rupturedMembranes', 'riskFactors', 'gravida', 'livingChildren', 'gestationalWeeks', 'gestationalDays', 'rupturedHours', 'deliveryMethod', 'deliveryDateTime', 'lscsIndication', 'babySex', 'babyWeightGrams', 'babyStatus', 'apgar1', 'apgar5', 'babyDetails']))
+            && levels.diff(previous).affectedKeys().hasOnly(keys)
+            && validCellAccessKey(keys[0], levels, previous, access)
+            && (keys.size() < 2 || validCellAccessKey(keys[1], levels, previous, access))
+            && (keys.size() < 3 || validCellAccessKey(keys[2], levels, previous, access))
+            && (keys.size() < 4 || validCellAccessKey(keys[3], levels, previous, access));
+        }
+
+        function validCellAccessKey(key, levels, previous, access) {
+          let ownLevel = previous.get(key, 0);
+          let base = key.matches('.*Half1$') ? key.split('Half1')[0] : key;
+          let aliasLevel = base in ['fetalHeartRate', 'fhrDeceleration', 'contractionFrequency', 'contractionDuration', 'oxytocin']
+            ? previous.get(key == base ? base + 'Half1' : base, 0) : 0;
+          let previousLevel = ownLevel >= aliasLevel ? ownLevel : aliasLevel;
+          return key is string && key.matches('^[A-Za-z][A-Za-z0-9]{0,39}$')
+            && key != 'initials' && key != 'partographMark'
+            && (!key.matches('.*Half1$') || key in ['fetalHeartRateHalf1', 'fhrDecelerationHalf1', 'contractionFrequencyHalf1', 'contractionDurationHalf1', 'oxytocinHalf1'])
+            && previousLevel is int
+            && (isHeaderColumn() || previousLevel <= access)
+            && levels[key] == access;
+        }
+
+        function validInitialColumn(data) {
+          return data.keys().hasOnly([
+              'lastEditorUid', 'lastEditorAccessLevel', 'highestEditorAccessLevel', 'highestEditorUids',
+              'revision', 'confirmed', 'lastEditedAt', 'lastEventId', 'cellAccessLevels', 'womanDocumentId', 'sessionId', 'timestampMillis', 'chartColumnIndex', 'chartStartMillis'
+            ])
+            && data.keys().hasAll([
+              'lastEditorUid', 'lastEditorAccessLevel', 'highestEditorAccessLevel', 'highestEditorUids',
+              'revision', 'confirmed', 'lastEditedAt', 'lastEventId', 'cellAccessLevels', 'womanDocumentId', 'sessionId', 'timestampMillis', 'chartColumnIndex', 'chartStartMillis'
+            ])
+            && data.sessionId is string && data.sessionId.matches('^[A-Za-z0-9_-]{1,128}$')
+            && (isHeaderColumn() ? columnId == 'header-' + data.sessionId
+              : data.chartColumnIndex >= 0 && columnId == 'timeline-' + data.womanDocumentId + '-' + string(data.chartColumnIndex))
+            && data.timestampMillis is number && data.timestampMillis >= 0 && data.timestampMillis <= request.time.toMillis()
+            && data.chartColumnIndex is int && data.chartColumnIndex >= -1 && data.chartColumnIndex <= 2147483647
+            && data.chartStartMillis is number && data.chartStartMillis >= 0 && data.chartStartMillis <= data.timestampMillis
+            && data.lastEditorUid == request.auth.uid
+            && validAccessLevel(data.lastEditorAccessLevel)
+            && data.lastEditorAccessLevel == memberAccessLevel()
+            && data.highestEditorAccessLevel == data.lastEditorAccessLevel
+            && data.highestEditorUids == [request.auth.uid]
+            && data.revision == 1
+            && data.confirmed == false
+            && data.lastEditedAt == request.time
+            && freshEventExistsAfter(data.lastEventId)
+            && validCellAccess(data, {});
+        }
+
+        function validCellEditUpdate(data) {
+          let changed = data.diff(resource.data).affectedKeys();
+          let access = memberAccessLevel();
+          let higher = access > resource.data.highestEditorAccessLevel;
+          let tied = access == resource.data.highestEditorAccessLevel;
+          return resource.data.confirmed is bool
+            && changed.hasOnly([
+              'lastEditorUid', 'lastEditorAccessLevel', 'highestEditorAccessLevel', 'highestEditorUids',
+              'revision', 'lastEditedAt', 'lastEventId', 'cellAccessLevels'
+            ].concat(isHeaderColumn() ? ['confirmed'] : []))
+            && (!isHeaderColumn() || data.confirmed == false)
+            && validCellAccess(data, resource.data.get('cellAccessLevels', {}))
+            && data.lastEditorUid == request.auth.uid
+            && data.lastEditorAccessLevel == access
+            && data.revision == resource.data.revision + 1
+            && data.lastEditedAt == request.time
+            && freshEventExistsAfter(data.lastEventId)
+            && (higher
+              ? data.highestEditorAccessLevel == access && data.highestEditorUids == [request.auth.uid]
+              : tied
+                ? data.highestEditorAccessLevel == resource.data.highestEditorAccessLevel
+                  && data.highestEditorUids.hasAll(resource.data.highestEditorUids)
+                  && data.highestEditorUids.hasAny([request.auth.uid])
+                  && data.highestEditorUids.toSet().size() == data.highestEditorUids.size()
+                  && data.highestEditorUids.toSet().difference(resource.data.highestEditorUids.toSet()).hasOnly([request.auth.uid])
+                  && data.highestEditorUids.size() <= resource.data.highestEditorUids.size() + 1
+                : data.highestEditorAccessLevel == resource.data.highestEditorAccessLevel
+                  && data.highestEditorUids == resource.data.highestEditorUids);
+        }
+
+        // Called only for a signed column. Read the immutable prior event once.
+        function higherThanSignOff(access, eventId) {
+          let previous = get(/databases/$(database)/documents/organizations/$(orgId)/clinicalData/v1/lcgObservations/$(eventId)).data;
+          return previous.recordType == 'confirmation' && previous.cellKey == 'initials'
+            && previous.columnId == columnId && previous.createdBy == resource.data.confirmedBy
+            && validAccessLevel(previous.accessLevel) && access > previous.accessLevel;
+        }
+
+        function canSupersedeSignOff(access) {
+          let previousId = resource.data.get('confirmationEventId', '');
+          return !resource.data.confirmed || (
+            previousId is string && previousId.matches('^[A-Za-z0-9_-]{1,128}$')
+            && higherThanSignOff(access, previousId)
+          );
+        }
+
+        // The column and its new immutable sign-off must agree in the SAME atomic commit.
+        function matchingNewSignOff(data, access) {
+          let eventId = data.confirmationEventId;
+          let event = getAfter(/databases/$(database)/documents/organizations/$(orgId)/clinicalData/v1/lcgObservations/$(eventId)).data;
+          return eventId is string && eventId.matches('^[A-Za-z0-9_-]{1,128}$')
+            && !exists(/databases/$(database)/documents/organizations/$(orgId)/clinicalData/v1/lcgObservations/$(eventId))
+            && event.recordType == 'confirmation' && event.cellKey == 'initials'
+            && event.columnId == columnId && event.revision == data.revision
+            && event.createdBy == request.auth.uid && event.accessLevel == access
+            && event.createdAt == request.time;
+        }
+
+        function validConfirmationUpdate(data) {
+          let access = memberAccessLevel();
+          return !isHeaderColumn() && resource.data.confirmed is bool
+            && data.diff(resource.data).affectedKeys().hasOnly(['confirmed', 'confirmedBy', 'confirmedAt', 'confirmationEventId', 'revision'])
+            && data.confirmed == true
+            && validAccessLevel(access)
+            && canSupersedeSignOff(access)
+            && data.confirmedBy == request.auth.uid
+            && data.confirmedAt == request.time
+            && data.revision is int && data.revision <= 2147483647
+            && data.revision == resource.data.revision + 1
+            && matchingNewSignOff(data, access);
+        }
+
+        // Trusted staff can link legacy encrypted records once. All clinical fields stay unchanged.
+        function validHistoricalRosterBinding(data) {
+          return data.diff(resource.data).affectedKeys().hasOnly(['womanDocumentId'])
+            && (resource.data.get('womanDocumentId', '') == '' || data.womanDocumentId == resource.data.womanDocumentId)
+            && canManageWomanArchive(orgId)
+            && validClinicalRosterLink(orgId, data);
+        }
+
+        allow get, list: if dataVersion == 'v1' && activeClinicalMember(orgId);
+        allow create: if dataVersion == 'v1' && writableClinicalMember(orgId)
+          && writableClinicalColumn(orgId, request.resource.data) && validInitialColumn(request.resource.data);
+        allow update: if dataVersion == 'v1' && writableClinicalMember(orgId)
+          && (validHistoricalRosterBinding(request.resource.data)
+            || (request.resource.data.womanDocumentId == resource.data.womanDocumentId
+              && writableClinicalColumn(orgId, request.resource.data)
+              && (validCellEditUpdate(request.resource.data) || validConfirmationUpdate(request.resource.data))));
+        allow delete: if false;
+      }
+
+      // Legacy note-only corrections remain readable; new corrections are
+      // encrypted cellCorrection events atomically updating a confirmed column.
+      match /clinicalData/{dataVersion}/lcgCorrections/{correctionId} {
+        allow get, list: if dataVersion == 'v1' && activeClinicalMember(orgId);
+        allow write: if false;
+      }
+
+      // Unmodeled organization paths remain closed by default.
+      match /{organizationData=**} {
+        allow read, write: if false;
+      }
+    }
+
+    // Collection-group listeners used by a user are constrained to documents
+    // whose userId is their own UID. Firestore Rules are not query filters, so
+    // clients must include where('userId', '==', request.auth.uid).
+    match /{parent=**}/members/{memberId} {
+      allow get, list: if verifiedUser() && resource.data.userId == request.auth.uid;
+    }
+    match /{parent=**}/accessRequests/{requestId} {
+      allow get, list: if verifiedUser() && resource.data.userId == request.auth.uid;
+    }
+
+    // All unmodeled collections are denied by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

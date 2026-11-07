@@ -1,0 +1,29 @@
+{
+  "firestore": {
+    "database": "(default)",
+    "location": "asia-south1",
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "hosting": {
+    "public": "webApp/build/dist/js/productionExecutable",
+    "predeploy": [
+      "./gradlew :webApp:jsBrowserDistribution"
+    ],
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "**/*.map"
+    ]
+  },
+  "auth": {
+    "providers": {
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "jananisyncweb",
+        "supportEmail": "sharmilaarunbabuandabhishekdas@gmail.com"
+      }
+    }
+  }
+}

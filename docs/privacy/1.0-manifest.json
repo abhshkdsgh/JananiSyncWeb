@@ -1,0 +1,11 @@
+{
+  "policyVersion": "1.0",
+  "effectiveDate": "2026-10-30",
+  "policySha256": "d8e97c64437b0a6fea751c3ec1808fe84e3ffa10a439a59f6805c88e216beac2",
+  "hashFormat": "SHA-256 of exact UTF-8 policy Markdown bytes, LF, including final newline",
+  "presentationVersion": 1,
+  "acceptanceStatement": "I have reviewed Privacy Policy version 1.0 and agree to the account and service processing it describes. This is not consent on behalf of any patient.",
+  "denialStatement": "I decline Privacy Policy version 1.0 and understand that organization and clinical access will remain blocked.",
+  "acceptButton": "Accept and continue",
+  "denyButton": "Deny and stop"
+}

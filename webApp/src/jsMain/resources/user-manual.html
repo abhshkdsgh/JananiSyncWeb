@@ -1,0 +1,316 @@
+<!doctype html>
+<!-- Generated from USER_MANUAL.md. Edit the Markdown or this template, then run scripts/generate_user_manual.py. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="The public JananiSync user manual: accounts, ward admissions, Labour Care Guide, Partograph, exports, and administrator tasks. No sign-in required.">
+  <meta name="theme-color" content="#502b80">
+  <title>User Manual · JananiSync</title>
+  <style>
+    :root { color-scheme: light; --ink: #242035; --muted: #625d73; --purple: #623994; --line: #e4dfec; }
+    * { box-sizing: border-box; }
+    html { scroll-padding-top: 6rem; }
+    body { margin: 0; color: var(--ink); background: #f7f5fa; font: 1rem/1.75 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    a { color: var(--purple); text-underline-offset: .2em; }
+    a:hover { color: #3c1a64; }
+    :focus-visible { outline: 3px solid #9975c6; outline-offset: 4px; }
+    .skip { position: absolute; left: 1rem; top: -5rem; z-index: 3; padding: .6rem 1rem; background: white; }
+    .skip:focus { top: .5rem; }
+    .site-header { position: sticky; top: 0; z-index: 2; border-bottom: 1px solid var(--line); background: #fff; }
+    .header-inner { max-width: 1440px; margin: auto; padding: 1rem 2rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .brand { color: var(--ink); font-weight: 750; font-size: 1.2rem; text-decoration: none; }
+    .brand span { color: var(--muted); font-weight: 400; font-size: .9rem; margin-left: .75rem; }
+    .app-link { display: inline-block; border: 1px solid var(--line); border-radius: .5rem; padding: .35rem .85rem; font-weight: 600; text-decoration: none; white-space: nowrap; }
+    .layout { max-width: 1440px; margin: auto; display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 2.5rem; padding: 2rem; align-items: start; }
+    .contents { position: sticky; top: 6rem; max-height: calc(100dvh - 7rem); overflow: auto; padding: 0 .5rem .5rem 0; }
+    .contents summary { font-weight: 700; cursor: pointer; padding: .5rem 0; }
+    .contents ul { margin: .4rem 0 0; list-style: none; padding: 0; }
+    .contents a { display: block; border-radius: .4rem; padding: .35rem .65rem; color: var(--muted); font-size: .875rem; line-height: 1.5; text-decoration: none; }
+    .contents a:hover, .contents a:focus { color: var(--purple); background: #eee7f6; }
+    main { min-width: 0; padding: 2.5rem 3rem; border: 1px solid var(--line); border-radius: 1rem; background: #fff; }
+    .public-note { margin: 0 0 1rem; color: var(--purple); font-size: .8rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    h1, h2, h3 { line-height: 1.25; letter-spacing: -.025em; }
+    h1 { font-size: clamp(2rem, 4vw, 3rem); margin: 0 0 1.5rem; }
+    h2 { font-size: 1.65rem; margin: 3rem 0 1.2rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
+    h3 { font-size: 1.15rem; margin: 2rem 0 .8rem; }
+    p { margin: .85rem 0; }
+    li { margin: .5rem 0; }
+    ul, ol { padding-left: 1.5rem; }
+    code { padding: .1em .3em; border-radius: .25rem; background: #f2eef7; font-size: .875em; overflow-wrap: anywhere; }
+    .table-scroll { overflow-x: auto; margin: 1.3rem 0; border: 1px solid var(--line); border-radius: .5rem; }
+    table { width: 100%; border-collapse: collapse; font-size: .925rem; line-height: 1.6; }
+    th, td { padding: .8rem 1rem; text-align: left; vertical-align: top; min-width: 10rem; }
+    th { background: #f2eef7; font-weight: 650; }
+    td { border-top: 1px solid var(--line); }
+    tbody tr:nth-child(even) { background: #fcfbfd; }
+    footer { color: var(--muted); font-size: .875rem; text-align: center; padding: 0 1.5rem 2rem; }
+    @media (max-width: 1000px) {
+      .layout { grid-template-columns: 220px minmax(0, 1fr); gap: 1.5rem; padding: 1.5rem; }
+      main { padding: 2rem; }
+    }
+    @media (max-width: 760px) {
+      html { scroll-padding-top: 5.5rem; }
+      .header-inner { padding: .8rem 1rem; }
+      .brand span { display: none; }
+      .layout { display: block; padding: 1rem; }
+      .contents { position: static; max-height: none; padding: .4rem 1rem; margin-bottom: 1rem; background: #fff; border: 1px solid var(--line); border-radius: .75rem; }
+      main { padding: 1.4rem; border-radius: .75rem; }
+      h2 { font-size: 1.4rem; }
+      th, td { padding: .65rem; }
+    }
+    @media print {
+      .site-header, .contents, .skip, footer, .public-note { display: none; }
+      body { background: white; font-size: 10pt; color: black; }
+      .layout { display: block; padding: 0; max-width: none; }
+      main { padding: 0; border: 0; }
+      h2, h3 { break-after: avoid; }
+      tr { break-inside: avoid; }
+      .table-scroll { overflow: visible; }
+      th, td { min-width: 0; }
+      a { color: inherit; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#manual">Skip to manual</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="./">JananiSync <span>Help &amp; documentation</span></a>
+      <a class="app-link" href="./">Open JananiSync &rarr;</a>
+    </div>
+  </header>
+  <div class="layout">
+    <nav class="contents" aria-label="Manual contents">
+      <details open>
+        <summary>On this page</summary>
+        <ul>
+<li><a href="#1-about-jananisync">1. About JananiSync</a></li>
+<li><a href="#2-before-you-begin">2. Before you begin</a></li>
+<li><a href="#3-quick-start-for-clinical-staff">3. Quick start for clinical staff</a></li>
+<li><a href="#4-accounts-and-privacy-review">4. Accounts and privacy review</a></li>
+<li><a href="#5-organisation-access-and-recovery-phrases">5. Organisation access and recovery phrases</a></li>
+<li><a href="#6-navigation-and-appearance">6. Navigation and appearance</a></li>
+<li><a href="#7-wards-and-admissions">7. Wards and admissions</a></li>
+<li><a href="#8-set-up-an-admission-chart">8. Set up an admission chart</a></li>
+<li><a href="#9-use-the-labour-care-guide">9. Use the Labour Care Guide</a></li>
+<li><a href="#10-use-the-partograph">10. Use the Partograph</a></li>
+<li><a href="#11-sign-off-review-history-and-correct-entries">11. Sign off, review history, and correct entries</a></li>
+<li><a href="#12-record-second-stage-and-birth">12. Record second stage and birth</a></li>
+<li><a href="#13-archive-and-restore-admissions">13. Archive and restore admissions</a></li>
+<li><a href="#14-export-and-print-charts">14. Export and print charts</a></li>
+<li><a href="#15-connectivity-local-storage-and-installed-use">15. Connectivity, local storage, and installed use</a></li>
+<li><a href="#16-administrator-tasks">16. Administrator tasks</a></li>
+<li><a href="#17-troubleshooting-and-support">17. Troubleshooting and support</a></li>
+<li><a href="#18-glossary">18. Glossary</a></li>
+        </ul>
+      </details>
+    </nav>
+    <main id="manual" tabindex="-1">
+      <p class="public-note">Public user guide · No sign-in required</p>
+<h1 id="jananisync-user-manual">JananiSync User Manual</h1>
+<p><strong>Work in progress — Dummy data only.</strong> Do not enter, upload, or use actual patient or clinical data. This version is for demonstration and testing only and must not be used for clinical care.</p>
+<p><strong>Audience:</strong> authorised nurses, doctors, and organisation administrators</p>
+<p><strong>Application:</strong> JananiSync</p>
+<p><strong>Manual reviewed:</strong> 30 October 2026</p>
+<p>This manual explains how to use JananiSync. The options you see depend on your account permissions and the version your organisation uses. Contact your administrator for help with setup.</p>
+<h2 id="1-about-jananisync">1. About JananiSync</h2>
+<p>JananiSync helps healthcare staff manage maternity admissions and document labour care. It provides a ward roster, a WHO Labour Care Guide (LCG) view, a Modified WHO Partograph view, clinical entry histories, column sign-offs, archiving, and PDF/print export.</p>
+<p>The LCG and Partograph show the same admission&#x27;s records. Switching views does not create a separate chart. Some observations are available in only one view, and the two views expose different half-hour recording fields.</p>
+<p>Use the application to document observed care under your organisation&#x27;s clinical procedures. Its alert markings and chart reference lines do not generate treatment decisions or enforce a clinical observation schedule.</p>
+<h3 id="roles-and-access-levels">Roles and access levels</h3>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable reference table"><table><thead><tr><th scope="col">Account status or role</th><th scope="col">Available work</th></tr></thead><tbody><tr><td>Account setup in progress</td><td>Complete privacy review, verify email, and request organisation access.</td></tr><tr><td>Pending applicant</td><td>Wait for approval or cancel the joining request. Clinical records are unavailable.</td></tr><tr><td>Active nurse or doctor</td><td>After unlocking patient records, use wards, admit women, record and review observations, sign off eligible columns, and export charts.</td></tr><tr><td>Active administrator</td><td>Perform clinical work and use the Admin console to manage membership, wards, and access to records.</td></tr></tbody></table></div>
+<p>Each organisation assigns a whole-number <strong>access level from 10 to 99</strong>. Editing a saved cell requires a level at least as high as that cell&#x27;s recorded level. Different cells and half-hour readings can have different protection levels. Replacing an existing sign-off requires a level strictly higher than the previous signer&#x27;s level. Archiving and unarchiving require level <strong>60–99</strong>.</p>
+<p>Access levels primarily control changes and sign-offs. Clinical reading is not restricted to a member&#x27;s assigned patients within the organisation.</p>
+<h2 id="2-before-you-begin">2. Before you begin</h2>
+<p>Have the following ready:</p>
+<ul><li>The JananiSync website address supplied by your organisation.</li><li>An up-to-date web browser on a secured device.</li><li>An internet connection for initial loading, account setup, verification, privacy acceptance, and organisation access setup.</li><li>Access to your work email inbox.</li><li>Your organisation&#x27;s eight-character access code, if you need to join.</li><li>Your personal 12-word recovery phrase, if you have already set up secure access.</li></ul>
+<p>Keep the device&#x27;s date, time, and time zone correct. Clinical date/time pickers use local device time and a 24-hour clock; chart setup also shows the time zone. Privacy decision history explicitly displays UTC times.</p>
+<p>Your sign-in password and recovery phrase serve different purposes:</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable reference table"><table><thead><tr><th scope="col">Item</th><th scope="col">Purpose</th><th scope="col">Handling</th></tr></thead><tbody><tr><td>Email and password</td><td>Sign in to your account.</td><td>Use only in the account sign-in flow.</td></tr><tr><td>Personal 12-word recovery phrase</td><td>Unlock patient records on a device.</td><td>Store privately, labelled with the organisation name. Never give it to another person.</td></tr><tr><td>Organisation access code</td><td>Identify the organisation when applying to join.</td><td>Obtain it from an administrator; it does not grant access by itself.</td></tr><tr><td>Public-key fingerprint</td><td>Check that the recovery key belongs to the correct person.</td><td>May be shared with your administrator through a trusted way to contact them, such as a phone call.</td></tr></tbody></table></div>
+<h2 id="3-quick-start-for-clinical-staff">3. Quick start for clinical staff</h2>
+<ol><li>Open the organisation&#x27;s JananiSync website and <strong>Log in</strong>, or <strong>Sign up</strong> if you do not have an account.</li><li>Record your privacy decision and verify your email. Organisation access requires acceptance of the current policy.</li><li>If needed, enter your name and organisation code, select Nurse or Doctor, prepare secure access, save the recovery phrase, and <strong>Request access</strong>.</li><li>After administrator approval, enter your personal phrase and select <strong>Access patient records</strong>.</li><li>Select <strong>Open ward</strong>, find the correct woman, and choose <strong>Open guide</strong> or <strong>Partograph</strong>. Use <strong>Admit a woman</strong> for a new admission.</li><li>For a new chart, check the start date/time, select <strong>Set chart start</strong>, then <strong>Use this start time</strong>.</li><li>Record observations. LCG cells save as editing finishes; Partograph marks require <strong>Confirm and save</strong>.</li><li>Review the saved values and any message about changes waiting to be shared. <strong>Sign off column</strong> when its observations are complete.</li><li>Use the stage controls at full dilation and birth, verifying the patient and time in each confirmation dialog.</li><li>Export if required, then open the account-name menu and select <strong>Logout</strong> when finished.</li></ol>
+<h2 id="4-accounts-and-privacy-review">4. Accounts and privacy review</h2>
+<h3 id="create-an-account">Create an account</h3>
+<ol><li>On the login screen, select <strong>Sign up</strong>.</li><li>Enter <strong>Email address</strong>, <strong>Password</strong>, and <strong>Confirm password</strong>.</li><li>Select <strong>Create account and review privacy</strong>. Correct any validation or account-creation error shown.</li><li>Read the privacy policy and choose <strong>Accept and continue</strong> or <strong>Deny and stop</strong>.</li><li>Open the verification link sent to your email address.</li><li>Return to JananiSync and select <strong>I&#x27;ve verified my email</strong>. Use <strong>Resend verification email</strong> if needed.</li></ol>
+<p>Account creation creates a sign-in account before the privacy decision is recorded. Organisation and clinical access remain blocked until your acceptance of the current policy has been saved and your email is verified.</p>
+<h3 id="sign-in">Sign in</h3>
+<p>Enter <strong>Email</strong> and <strong>Password</strong>, then select <strong>Log in</strong>. Complete any privacy review or email-verification step shown. If you have access to several organisations, select one and choose <strong>Continue</strong>.</p>
+<h3 id="review-or-change-your-privacy-decision">Review or change your privacy decision</h3>
+<p>The <strong>Privacy policy</strong> icon is available before sign-in. After sign-in, Settings provides <strong>Privacy policy</strong>, <strong>Change privacy decision</strong>, and <strong>Privacy decision history</strong>.</p>
+<p>A denial blocks organisation and clinical access but retains the account and decision history. Use <strong>Review policy again</strong> to make a new decision, or <strong>Sign out</strong>. A new decision is added to history rather than replacing an earlier decision. Updated policy versions may require another review.</p>
+<p><strong>Privacy decision history</strong> shows the 100 most recent saved decisions, including decision, policy version, account details, and the time recorded in UTC (a common reference time zone). Use <strong>Refresh</strong> to reload or select and copy details when needed. If the check fails, use <strong>Retry server check</strong> after reconnecting to the internet.</p>
+<h3 id="reset-a-forgotten-password">Reset a forgotten password</h3>
+<ol><li>On the login screen, select <strong>Forgot password?</strong> to open <strong>Reset password</strong>. An email already entered on the login screen is filled in for you.</li><li>Enter or check your account&#x27;s <strong>Email</strong>, then select <strong>Send reset link</strong>. Wait while <strong>Sending reset link…</strong> is shown.</li><li>If the address belongs to an eligible account, JananiSync sends a password reset email. Check your inbox and spam folder. The confirmation does not disclose whether an account exists.</li><li>Open the link in the email and follow the instructions to choose a new password.</li><li>Return to JananiSync, select <strong>Back to log in</strong>, and sign in using the new password.</li></ol>
+<p>If an error appears, check the email address and your connection, then retry. If requests are temporarily limited, wait before trying again. Contact your organisation administrator or application support if you still cannot reset your password.</p>
+<p>Changing a sign-in password does not restore access to patient records if you have lost your recovery phrase.</p>
+<h2 id="5-organisation-access-and-recovery-phrases">5. Organisation access and recovery phrases</h2>
+<h3 id="request-to-join">Request to join</h3>
+<ol><li>Obtain the organisation&#x27;s access code from its administrator. Organisations are not listed or searchable.</li><li>In the joining form, enter <strong>Your name</strong> and <strong>Organisation access code</strong>. The code contains eight letters or numbers.</li><li>Select the requested role: <strong>Nurse</strong> or <strong>Doctor</strong>.</li><li>Select <strong>Prepare secure access</strong>.</li><li>Privately record the generated 12-word phrase in its displayed order, together with the organisation name. The phrase is shown during this setup and cannot be retrieved later from the application.</li><li>Select <strong>I have safely recorded my recovery phrase</strong>, then <strong>Request access</strong>.</li><li>Wait at <strong>Access pending</strong> for an administrator to approve membership and allow access to patient records.</li></ol>
+<p>To withdraw a pending application, select <strong>Cancel joining request</strong>, then <strong>Confirm cancellation</strong>. You can apply again using the registered recovery key. If the request is declined or membership is deactivated, contact the administrator.</p>
+<h3 id="unlock-patient-records">Unlock patient records</h3>
+<p>After approval, enter <strong>Your 12-word recovery phrase</strong> and select <strong>Access patient records</strong>. A chart may instead show <strong>Unlock organisation key</strong>; enter your own personal phrase there too.</p>
+<p>Your phrase unlocks patient records on your device and is not sent to the service. Enter your own phrase, not your administrator&#x27;s.</p>
+<p>Access is remembered in the same browser on this device so you can open records again. Your recovery phrase is not saved; keep it safely elsewhere. Use a secured personal or work device and select <strong>Logout</strong> when finished.</p>
+<h3 id="work-with-multiple-organisations">Work with multiple organisations</h3>
+<p>Use the account-name menu&#x27;s <strong>Join another organisation</strong> to request a new nurse or doctor membership. Each organisation has its own approval, role, access level, clinical data, and key access.</p>
+<p>To use an existing active membership:</p>
+<ol><li>Finish editing and wait for saving to complete.</li><li>Open the <strong>account-name menu</strong> in the top bar and select <strong>Switch organisation</strong>. This option appears when your account has more than one active organisation membership. It is unavailable while logging out or leaving an organisation.</li><li>On <strong>Choose an organisation</strong>, find the target organisation&#x27;s card and select <strong>Continue</strong>.</li><li>Unlock that organisation&#x27;s patient records if prompted, then select the ward and admission again.</li></ol>
+<p>The switching control is in the account-name menu, including when viewing patient care, the Admin console, Settings, or the joining form. Switching closes the menu, exits an open joining form, and clears the selected admission. It does not submit or withdraw a joining request already sent for review.</p>
+<p>If the joining form reports <strong>You already have access to [organisation name]. Open your account menu and choose Switch organisation.</strong>, use the switching steps above. A second joining request is unnecessary and the form blocks duplicate submission. If a request is already awaiting administrator review, check the pending request instead of submitting another.</p>
+<p>If a project owner has already added your active admin membership to a second organisation, switch to it directly. You do not need to sign up again or submit a joining request. If the organisation is missing from the chooser, reload or sign out and back in with the same account. Ask the person responsible for account setup to check that your administrator membership is active and linked to the same email account.</p>
+<p>After switching as an administrator, open <strong>Admin console</strong>. Set up secure access if the selected organisation is new, saving your displayed phrase, or unlock existing access using your own personal recovery phrase for that organisation. The first organisation&#x27;s phrase does not automatically unlock the second. See <a href="#prepare-administrator-access">Prepare administrator access</a> for the controls.</p>
+<p>Additional membership can use a separate generated recovery key. If the joining form offers reuse, select the source organisation whose phrase you possess, enter <strong>Selected organisation&#x27;s recovery phrase</strong>, then select <strong>Verify and reuse selected key</strong>. Reuse is an explicit choice. An already registered key for the target organisation is preserved; rejoining does not automatically replace it.</p>
+<p>When rejoining with an existing registered key, no new phrase is generated. Select <strong>I understand I need the old phrase or an admin-approved replacement to access records</strong> before requesting access. After approval, use the old phrase or request replacement in Settings.</p>
+<p>Label every saved phrase with its organisation name, even if you deliberately reuse one key.</p>
+<h3 id="replace-a-lost-recovery-key">Replace a lost recovery key</h3>
+<p>Active doctors and nurses can request replacement for the selected organisation:</p>
+<ol><li>Open <strong>Settings → Replace lost recovery key</strong>.</li><li>Select <strong>Generate new recovery key</strong>.</li><li>Safely record the new phrase and its displayed fingerprint.</li><li>Select <strong>I have safely saved my new recovery phrase</strong>.</li><li>Select <strong>Request administrator approval</strong>.</li><li>Verify your identity and compare the <strong>New key fingerprint</strong> with your administrator through a trusted channel. Share the fingerprint, never the phrase.</li><li>After approval, unlock using the new phrase.</li></ol>
+<p>Until approval, the previous key remains registered. Use <strong>Discard new key</strong> before submission or <strong>Cancel replacement request</strong> while pending if you need to abandon the request. Replacement changes only the selected organisation&#x27;s key; your account, permissions, and clinical contributions remain.</p>
+<p>Administrators cannot replace their own key through this flow. An administrator must still be able to unlock the organisation’s records to approve replacement access. If nobody can unlock them, the records may be lost; contact your administrator immediately.</p>
+<h3 id="leave-an-organisation-or-log-out">Leave an organisation or log out</h3>
+<p>The account-name menu displays your organisation, role, and access level. It also offers <strong>Join another organisation</strong> and, when you have multiple active memberships, <strong>Switch organisation</strong>.</p>
+<ul><li><strong>Leave organisation → Confirm leave</strong> ends that organisation&#x27;s membership access immediately. Clinical contributions and membership history remain. An administrator must complete an Access Update for remaining members. Administrators cannot leave through this control.</li><li><strong>Logout</strong> signs you out and attempts to remove remembered access. It does not erase all records stored on the device, appearance settings, downloaded PDFs, or printouts.</li></ul>
+<h2 id="6-navigation-and-appearance">6. Navigation and appearance</h2>
+<p>The top-bar <strong>User manual</strong> help icon opens this guide as a public web page. You can also open <code>user-manual.html</code> directly beside the app&#x27;s website address. Reading the guide does not require signing in; use <strong>Open JananiSync</strong> on the guide to return to the app.</p>
+<p>Use the top-bar <strong>Go back</strong> and <strong>Go forward</strong> arrows or the browser&#x27;s navigation controls. If a saved link is unavailable, return through the dashboard and select the ward and admission again.</p>
+<p>Administrators can switch between <strong>Admin console</strong> and <strong>Patient care</strong> in the top bar. Clinical staff work through the clinical dashboard.</p>
+<p>Hold <strong>Ctrl</strong> (Windows/Linux) or <strong>Cmd</strong> (Mac) and scroll the mouse wheel to zoom the entire app in or out (50–300%). Press <strong>Ctrl+0</strong> or <strong>Cmd+0</strong> to reset zoom. Ordinary scrolling works without a modifier key. This zoom lasts until you reload the app and does not change exported chart layouts.</p>
+<p>Open <strong>Settings</strong> to change:</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable reference table"><table><thead><tr><th scope="col">Setting</th><th scope="col">Options</th></tr></thead><tbody><tr><td>Theme</td><td>System default, Light, Dark</td></tr><tr><td>Font size</td><td>12–24; default 16. Release the slider to apply. Text and interface sizes change together.</td></tr><tr><td>Accent colour</td><td>Purple, Blue, Teal, Green, Orange, Pink</td></tr></tbody></table></div>
+<p>Appearance preferences are saved in this browser on this device across sessions and logins. Select <strong>Done</strong> to return. These settings do not change exported chart layouts.</p>
+<p>For key verification, select <strong>Public-key fingerprint</strong>. If requested, enter <strong>Your personal recovery phrase</strong> and select <strong>Verify and show fingerprint</strong>. Check the organisation shown before sharing the fingerprint with its administrator.</p>
+<h2 id="7-wards-and-admissions">7. Wards and admissions</h2>
+<h3 id="find-an-admission">Find an admission</h3>
+<ol><li>On the clinical dashboard, locate the ward and select <strong>Open ward</strong>.</li><li>Use <strong>Search women</strong> to search by name, CR number, IP number, or either mobile number. Use <strong>Clear</strong> to remove the search.</li><li>Choose a status filter if needed:</li></ol>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable reference table"><table><thead><tr><th scope="col">Filter</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td>All women</td><td>All active admissions in the ward.</td></tr><tr><td>Labour yet to start</td><td>No recorded labour onset, diagnosis, or progress establishing labour status.</td></tr><tr><td>In labour</td><td>Recorded labour activity; includes second stage.</td></tr><tr><td>Second stage</td><td>Full dilation has been confirmed.</td></tr><tr><td>Birth given</td><td>Birth has been confirmed.</td></tr></tbody></table></div>
+<p>Status is derived from recorded information. It is unavailable while clinical data is locked or not loaded. The initial filter favours <strong>In labour</strong>, then <strong>Labour yet to start</strong>, otherwise <strong>All women</strong>, according to the ward&#x27;s records. Switch to <strong>All women</strong> if an expected admission is missing.</p>
+<p>Lists show up to 50 admissions per page. Use <strong>Previous page</strong> and <strong>Next page</strong>. Check the woman&#x27;s name, CR number, and IP number before choosing <strong>Open guide</strong> or <strong>Partograph</strong>.</p>
+<h3 id="admit-a-woman">Admit a woman</h3>
+<ol><li>Open the intended ward and select <strong>Admit a woman</strong>.</li><li>Complete the admission fields:</li></ol>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable reference table"><table><thead><tr><th scope="col">Field</th><th scope="col">Requirement</th></tr></thead><tbody><tr><td>Woman&#x27;s name</td><td>Required.</td></tr><tr><td>CR number</td><td>Required numeric registration number.</td></tr><tr><td>IP number</td><td>Required numeric inpatient number.</td></tr><tr><td>Date of birth</td><td>Required; select using the date picker.</td></tr><tr><td>Informant name</td><td>Optional.</td></tr><tr><td>Contact number</td><td>Optional.</td></tr><tr><td>Alternate contact number</td><td>Optional.</td></tr></tbody></table></div>
+<ol><li>Check the ward and identifiers, then select <strong>Save admission</strong>.</li><li>Wait for the admission to appear in the roster. On failure, review the error and check that patient records are unlocked before retrying.</li></ol>
+<p>Admission date/time is set when the admission is created. Roster-backed names, hospital numbers, and admission dates/times appear as read-only chart details. The current screens do not provide a general form for editing those admission details; refer mistakes to your administrator.</p>
+<h2 id="8-set-up-an-admission-chart">8. Set up an admission chart</h2>
+<h3 id="choose-the-chart-start">Choose the chart start</h3>
+<p>For an admission without recorded time columns:</p>
+<ol><li>Open its LCG or Partograph.</li><li>In <strong>Chart start time</strong>, review <strong>Start date and time</strong> and the displayed time zone. It defaults to the current time.</li><li>Use the calendar/time picker to select the correct current or past start, or select <strong>Use current time</strong>.</li><li>Select <strong>Set chart start</strong>.</li><li>Read the setup warning and choose <strong>Use this start time</strong>.</li><li>Save the first observation to establish that start permanently.</li></ol>
+<p><strong>After the first saved observation, the chart start cannot be changed here.</strong> Check it carefully for retrospective documentation. Chart start establishes the shared hourly schedule for both views; it is distinct from admission time.</p>
+<p>Each ordinary column represents an hour, with half-hour subdivisions where supported. Empty elapsed slots can be filled without first signing off earlier columns. Future observations are unavailable. A first-half reading becoming available does not make its +30-minute reading available early.</p>
+<p>Older charts may have observations between scheduled grid positions. Their recorded times remain unchanged; use the entry controls to select the intended column and check its exact time.</p>
+<h3 id="complete-the-chart-header">Complete the chart header</h3>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable reference table"><table><thead><tr><th scope="col">View</th><th scope="col">Editable header information</th></tr></thead><tbody><tr><td>LCG</td><td>Parity, Labour onset (spontaneous/induced), Active labour diagnosis, Ruptured membranes date/time, Risk factors.</td></tr><tr><td>Partograph</td><td>Gravida, Parity, Living children, POG completed weeks and additional days, Ruptured membranes in hours.</td></tr></tbody></table></div>
+<p>POG additional days must be <strong>0–6</strong>. Patient name comes from the admission and is read only. The Partograph also displays the roster hospital number and admission date/time.</p>
+<p>Valid typed header edits save when the field loses focus. Category and date/time selections save immediately. Use the adjacent history icon to review a header field&#x27;s changes.</p>
+<h2 id="9-use-the-labour-care-guide">9. Use the Labour Care Guide</h2>
+<p>The LCG is a table with observation rows and time columns.</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable reference table"><table><thead><tr><th scope="col">Section</th><th scope="col">Information recorded</th></tr></thead><tbody><tr><td>SUPPORT</td><td>Companion, pain relief, oral fluid, posture.</td></tr><tr><td>BABY</td><td>Baseline FHR, decelerations, amniotic fluid, fetal position, caput, moulding.</td></tr><tr><td>WOMAN</td><td>Pulse, systolic/diastolic BP, temperature, urine protein and acetone.</td></tr><tr><td>LABOUR</td><td>Contraction frequency/duration, cervical dilation, descent, and second-stage pushing onset.</td></tr><tr><td>MEDICATION</td><td>Oxytocin, medicines, IV fluids.</td></tr><tr><td>SHARED DECISION MAKING</td><td>Assessment, plan, and sign-off/initials.</td></tr></tbody></table></div>
+<h3 id="record-observations">Record observations</h3>
+<ol><li>Check the patient and time heading. Choose an eligible elapsed column.</li><li>Select the appropriate cell and type a value or choose a category.</li><li>For typed entries, tap or click another cell to finish editing and trigger saving. Category selections save immediately.</li><li>Check for validation errors or <strong>Saving cell…</strong>, and review the resulting value.</li><li>Use the labour-progress grid to plot <strong>X</strong> for cervical dilation and <strong>O</strong> for descent. In second stage, <strong>P</strong> marks pushing onset.</li></ol>
+<p>There is no separate whole-chart Save button. Each cell saves separately. A red invalid field has not been successfully committed; correct it before continuing.</p>
+<p>LCG provides separate first-half and +30-minute readings for <strong>FHR, decelerations, contraction frequency, and contraction duration</strong>. Check which half you are editing.</p>
+<p>To clear a categorical entry, choose <strong>Clear recorded value</strong>. For a typed field, remove its contents and finish editing. X/O/P plot selections save immediately; tapping an already selected mark again clears it. Clearing retains history; a blank is distinct from an observed zero.</p>
+<h3 id="read-alerts">Read alerts</h3>
+<p>The <strong>ALERT</strong> column displays the app&#x27;s reference thresholds. An ellipse highlights a recorded value that matches its alert logic. Cervical-delay highlighting also considers the history of recorded examinations. Blank cells are not measurements.</p>
+<p>Review highlighted values under your organisation&#x27;s clinical procedures. The application permits recording actual observations without enforcing when examinations must occur.</p>
+<h3 id="use-the-table-on-a-phone">Use the table on a phone</h3>
+<p>Compact screens retain the section, observation, and alert columns on the left and show one time column on the right. Use the <strong>Previous time column</strong> and <strong>Next time column</strong> arrowheads in the sticky heading to page through time. Relevant half-hour subdivisions remain within that column.</p>
+<p>The heading stays visible while scrolling vertically. Presentation columns marked Skipped after full dilation are skipped by mobile paging; they remain visible in the wide chart and PDF. On wider screens, scroll horizontally to reach later columns.</p>
+<h2 id="10-use-the-partograph">10. Use the Partograph</h2>
+<p>Choose <strong>Partograph</strong> from the admission card, or <strong>View Partograph</strong> from the LCG. Select <strong>View LCG</strong> to return. The selected admission and shared records remain the same.</p>
+<h3 id="enter-and-save-a-mark">Enter and save a mark</h3>
+<ol><li>Under <strong>Enter chart data</strong>, select the time column and parameter, then select <strong>Record parameter</strong>. Alternatively, tap within the intended graph time band at the desired reading height.</li><li>Review the preview&#x27;s patient context, actual observation time, parameter, and value. A graph tap creates a local preview only.</li><li>Adjust the number or category in the form. Further graph taps adjust the preview without saving it.</li><li>Complete related fields when needed: BP uses a systolic/diastolic pair; contractions use count and duration.</li><li>Select <strong>Confirm and save</strong> to record the mark, or <strong>Cancel</strong> to discard the preview.</li><li>Review the saved mark and any message about saving or sharing changes.</li></ol>
+<p>The entry form appears over the chart on wide screens and as a bottom sheet on phones. Numeric fields show allowed limits; saving is disabled for invalid values. Systolic pressure must be above diastolic pressure. Where provided, the +1/−1 arrowheads adjust numeric entries within their bounds.</p>
+<h3 id="understand-chart-symbols">Understand chart symbols</h3>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable reference table"><table><thead><tr><th scope="col">Symbol or lane</th><th scope="col">Meaning in this application</th></tr></thead><tbody><tr><td>X</td><td>Cervical dilation.</td></tr><tr><td>O</td><td>Head descent in fifths palpable above the pubic symphysis, 5/5 to 0/5; not vaginal station.</td></tr><tr><td>Dots</td><td>FHR and maternal pulse readings.</td></tr><tr><td>Paired vertical BP marker</td><td>Systolic and diastolic readings.</td></tr><tr><td>Contraction boxes</td><td>Number of contractions per 10 minutes; shading represents duration.</td></tr><tr><td>Dotted / hatched / solid shading</td><td>Duration below 20 seconds / 20–40 seconds inclusive / above 40 seconds.</td></tr><tr><td>Oxytocin rows</td><td>Concentration in U/L and rate in drops/min.</td></tr><tr><td>Alert and action lines</td><td>Reference lines; they do not move the recorded observations or choose an entry value.</td></tr></tbody></table></div>
+<p>The modified Partograph&#x27;s cervical reference chart begins at 4 cm. Elapsed hours refer to its plotted chart origin, which is not automatically the admission time. Read the chart-start label, actual clock times, and date changes at midnight together.</p>
+<p>The on-screen graph covers 0–12 hours from its origin. A notice identifies recorded time points outside that view; inspect them through <strong>Cell edit history</strong>. PDF export continues into additional 12-hour windows.</p>
+<h3 id="half-hour-readings-and-view-differences">Half-hour readings and view differences</h3>
+<p>The Partograph supports first-half and +30-minute readings for FHR, amniotic fluid, moulding, cervical dilation, descent, pulse, BP, temperature, contractions, and oxytocin. Drugs, IV fluids, and urine rows do not have separate half-hour entries.</p>
+<p>LCG has fewer half-hour fields. Additional second-half Partograph readings remain stored and available in history; they are not substituted into the LCG&#x27;s first-half values. Missing readings stay blank.</p>
+<h3 id="erase-a-saved-parameter">Erase a saved parameter</h3>
+<p>Open the saved parameter&#x27;s form, choose <strong>Erase saved value</strong>, and review <strong>Confirm erase</strong>. Use <strong>Keep value</strong> to cancel. Erasing clears the selected field and half-hour while preserving its history. For BP or contractions, it clears only the chosen field, not automatically its paired value.</p>
+<h3 id="move-and-zoom">Move and zoom</h3>
+<p>Scroll horizontally or use the earlier/later hour controls to reach other chart times. Use the highlighted <strong>Chart zoom</strong> panel immediately above the chart: select <strong>Zoom in</strong>, <strong>Zoom out</strong>, or <strong>Reset to 100%</strong>. The panel shows the current zoom percentage; the chart supports 60–300% zoom. On touch devices, pinch with two fingers to zoom and swipe with one finger to scroll. Use the entry controls when tapping the graph precisely is difficult.</p>
+<h2 id="11-sign-off-review-history-and-correct-entries">11. Sign off, review history, and correct entries</h2>
+<h3 id="sign-off-a-column">Sign off a column</h3>
+<ol><li>Review the saved observations in the intended time column.</li><li>Select <strong>Sign off column</strong> beneath the column.</li><li>Check the patient and time in the confirmation dialog, then confirm.</li></ol>
+<p>Sign-off is an audit acknowledgement. It does not lock every cell and is not required before entering another eligible column. An existing sign-off can be superseded only by someone with a strictly higher access level; previous sign-offs remain in history.</p>
+<h3 id="review-cell-history">Review cell history</h3>
+<p>Select a cell and its history badge, a header&#x27;s history icon, or <strong>Cell edit history</strong>. In the history dialog, select the column/header and row to inspect.</p>
+<p>History shows initial values, changes, the author, recorded access level, saved time when available, and correction reasons. Cleared values remain in the history. Some older records may not have complete cell history. A message about pending changes means they have not yet been confirmed as saved online.</p>
+<h3 id="edit-or-make-a-reasoned-correction">Edit or make a reasoned correction</h3>
+<p>Ordinary eligible edits remain possible after sign-off. Your access level must meet the recorded level of each cell you change, including the selected half-hour. A grouped mark requires access to every field it changes. Sign-off does not add a separate confirmer-level threshold to ordinary cell editing.</p>
+<p>To document a correction with a reason:</p>
+<ol><li>Select the pencil icon on an eligible signed-off column, or open history and select <strong>Correct this cell</strong>.</li><li>In <strong>Correct confirmed cells</strong>, select up to four eligible cells and enter corrected values.</li><li>Enter <strong>Reason (required)</strong>.</li><li>Select <strong>Save correction</strong>.</li></ol>
+<p>Corrections add changes and retain previous entries and sign-offs. If the column changed while the dialog was open, close and reopen it to review the latest values. If a cell is unavailable at your access level, ask an appropriately authorised colleague to review it.</p>
+<h2 id="12-record-second-stage-and-birth">12. Record second stage and birth</h2>
+<p>Both chart views expose the same stage actions. They are separate from entering a dilation number or signing off an ordinary column.</p>
+<h3 id="confirm-full-dilation">Confirm full dilation</h3>
+<ol><li>Review the correct patient&#x27;s column and saved observations.</li><li>Select <strong>Full Dilation: Confirm and skip to second stage</strong>, or <strong>Confirm full dilation</strong> on a compact layout.</li><li>Verify the patient and column time, read the consequence, then select <strong>Confirm full dilation</strong>.</li></ol>
+<p><strong>This transition cannot be undone.</strong> It records full dilation and advances the guide to second stage. Remaining first-stage presentation slots are marked Skipped. Use <strong>Add second-stage column</strong> when offered to continue documenting eligible second-stage times.</p>
+<p>Use <strong>Skipped to second stage … View history</strong> to inspect the transition. Record pushing onset using the second-stage <strong>P</strong> control where applicable.</p>
+<h3 id="confirm-birth">Confirm birth</h3>
+<ol><li>Review the appropriate second-stage column and time.</li><li>Select <strong>Birth: Confirm and mark birth</strong>, or <strong>Confirm birth</strong> on a compact layout.</li><li>Verify the patient and time in the dialog, then select <strong>Confirm birth</strong>.</li></ol>
+<p>Birth is marked at that column time. Earlier observation gaps can still be completed subject to permissions, but new observations after the birth time are unavailable. The roster status updates to <strong>Birth given</strong>. Marking birth does not automatically archive the admission.</p>
+<h2 id="13-archive-and-restore-admissions">13. Archive and restore admissions</h2>
+<p>Staff with access level <strong>60–99</strong> can archive or unarchive an admission.</p>
+<h3 id="archive">Archive</h3>
+<ol><li>On the woman&#x27;s card or chart, select the archive icon (<strong>Archive woman</strong>).</li><li>Check the name, ward, CR number, and IP number.</li><li>Select <strong>Archive woman</strong> in the confirmation dialog.</li></ol>
+<p>The admission moves out of the active ward list to <strong>Archived women</strong>. Its clinical records remain available, and its chart becomes read only.</p>
+<h3 id="view-or-restore-an-archived-admission">View or restore an archived admission</h3>
+<ol><li>From the ward-selection screen, choose <strong>Archived women (count)</strong>.</li><li>Search by name, CR, IP, or either mobile number, and use the page controls if needed.</li><li>Open the LCG or Partograph to review the retained records.</li><li>To restore it, select <strong>Unarchive woman</strong>, check the confirmation, and confirm. It returns to the active list in its original ward.</li></ol>
+<p>Use <strong>Archive history</strong> to see archive/unarchive actions, authors, access levels, and saved times. Select <strong>Load older actions</strong> when available. Archiving changes visibility and editability; it does not delete records.</p>
+<h2 id="14-export-and-print-charts">14. Export and print charts</h2>
+<ol><li>Open the required admission&#x27;s LCG or Partograph and check its identity and saved observations.</li><li>Finish editing, confirm any Partograph preview, and wait for saving to finish. For a final shared record, also check that changes waiting to be shared have been saved online.</li><li>Select <strong>Export PDF / Print</strong>. Allow the preview pop-up if your browser blocks it.</li><li>In the preview, select <strong>Download PDF</strong>, or <strong>Print / Save as PDF</strong> for the browser print dialog.</li><li>Use <strong>A4 portrait</strong> and disable browser headers/footers when printing.</li></ol>
+<p>Export is unavailable while patient records are locked, records are loading, saving is in progress, an error loading records is present, or there are no saved observations. Unsaved graph previews are excluded.</p>
+<p>Charts use a fixed paper layout independent of theme, app font size, and zoom. LCG pages contain up to 12 columns; Partograph pages cover 12-hour windows. Long text appears in numbered continuation notes. Missing readings remain blank. A contraction count without a recorded duration is marked with a question mark.</p>
+<p>PDF and print rendering run locally in the browser. Downloaded PDF pages preserve visual symbols as images, so their text is not selectable. The recreated layouts are not official WHO-generated documents.</p>
+<p>Exports and printouts contain readable patient information outside the app&#x27;s access controls. Store and share them under your organisation&#x27;s records policy.</p>
+<h2 id="15-connectivity-local-storage-and-installed-use">15. Connectivity, local storage, and installed use</h2>
+<h3 id="understand-save-status">Understand save status</h3>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable reference table"><table><thead><tr><th scope="col">Message or state</th><th scope="col">What to do</th></tr></thead><tbody><tr><td>Saving cell… / Saving…</td><td>Wait for the operation to finish and review the value.</td></tr><tr><td>Saved in this browser; waiting for a connection to sync.</td><td>The change is saved on this device but may not yet appear on other devices. Reconnect and check that it has been saved online.</td></tr><tr><td>Loading encrypted observation grid…</td><td>Wait for loading before relying on the chart contents.</td></tr><tr><td>Error loading records or checking access</td><td>Review the message and contact an administrator if it persists. Do not assume the displayed chart is complete.</td></tr></tbody></table></div>
+<p>Seeing a change on your device does not mean it has been saved online. After reconnecting, check for messages about waiting changes and review the saved history. Some tasks need an internet connection, and not all records may be available offline.</p>
+<h3 id="install-and-update-the-web-app">Install and update the web app</h3>
+<p>When your version of JananiSync supports installation, use your browser&#x27;s install or add-to-home-screen option if offered. Installation is optional; the browser website remains usable.</p>
+<p>Open JananiSync while connected to the internet first and allow it to finish loading. The browser saves the files needed to open the app later. To view patient records, they must already be stored on the device, you must be signed in, and access must be unlocked. First-time sign-in and installation require a network connection.</p>
+<p>Updates install in the background. Close all JananiSync browser tabs and installed-app windows, then reopen while online to use an available update.</p>
+<h3 id="protect-local-information">Protect local information</h3>
+<p>Your browser may keep protected patient records and information about your use of the app. Remembered access works only in the same browser on the same device. Signing out does not remove every saved item or exported copy.</p>
+<p>Before clearing site data, make sure all entries have been saved online and recovery phrases are safely available. Clearing local data can remove records stored on the device, remembered access, and preferences; it does not delete the organisation&#x27;s records saved online. Offline devices may not learn of revoked access until they reconnect.</p>
+<h2 id="16-administrator-tasks">16. Administrator tasks</h2>
+<h3 id="prepare-administrator-access">Prepare administrator access</h3>
+<p>The first organisation administrator must be set up by the person responsible for JananiSync at your organisation. Users cannot make themselves administrators through the joining form. Obtain this setup from the person responsible for the app.</p>
+<p>For the first secure access setup:</p>
+<ol><li>Open the administrator dashboard.</li><li>Select <strong>Prepare admin encryption key</strong>.</li><li>Safely record the displayed 12-word phrase and confirm <strong>I safely recorded the phrase</strong>. If an existing account key is reused, confirm that you still have its phrase.</li><li>Select <strong>Initialise organisation key</strong> and keep the page open while saving completes.</li></ol>
+<p>In later sessions, open <strong>Admin console</strong>, enter <strong>Your personal 12-word recovery phrase</strong>, and select <strong>Verify and open dashboard</strong> before managing members or wards. Administrator access is remembered on the device. Use a secured browser and sign out when finished.</p>
+<p>The console contains <strong>Requests</strong>, <strong>Members</strong>, <strong>Wards</strong>, and <strong>Security</strong> tabs. Use <strong>Patient care</strong> in the top bar to return to clinical work.</p>
+<h3 id="approve-joining-requests">Approve joining requests</h3>
+<ol><li>Open <strong>Requests</strong>. The organisation access code is shown here for distribution to authorised staff.</li><li>Review the applicant&#x27;s name, email, user ID, and requested role.</li><li>Assign an <strong>Access level (10–99)</strong> appropriate to your organisation&#x27;s responsibilities.</li><li>Select <strong>Approve and grant access as nurse</strong> or <strong>Approve and grant access as doctor</strong>.</li><li>Wait for completion and verify the member&#x27;s access status.</li></ol>
+<p>The current request list provides approval and key granting together. It does not expose a reject button for new membership requests.</p>
+<h3 id="manage-members">Manage members</h3>
+<p>Under <strong>Members</strong>, select the intended member and use the applicable controls:</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable reference table"><table><thead><tr><th scope="col">Action</th><th scope="col">Steps and effect</th></tr></thead><tbody><tr><td>Change clinical role</td><td>Select Doctor or Nurse, then <strong>Save role</strong>. Promotion to administrator is not offered here.</td></tr><tr><td>Change access level</td><td>Enter 10–99, then <strong>Save access level</strong>. Historical entry levels remain part of the audit history.</td></tr><tr><td>Check key access</td><td>Use <strong>Check access status</strong> if status could not be verified.</td></tr><tr><td>Finish key access</td><td>Use <strong>Complete access setup</strong> or <strong>Register key for automatic updates</strong> when shown.</td></tr><tr><td>Deactivate</td><td>Select <strong>Deactivate access</strong>, read the consequences, then <strong>Confirm deactivation</strong>. Access is revoked and an Access Update begins.</td></tr><tr><td>Reactivate</td><td>Use <strong>Reactivate access</strong> for an inactive member. Members who left must apply to join again.</td></tr></tbody></table></div>
+<h3 id="configure-wards">Configure wards</h3>
+<ol><li>Open <strong>Wards</strong>.</li><li>Enter <strong>Ward name</strong>, <strong>Location</strong>, and <strong>Ward head</strong>. Ward name is required.</li><li>Select <strong>Add ward</strong>.</li><li>To change a ward, select <strong>Configure</strong>, edit the fields, then <strong>Save ward</strong>. Use <strong>Cancel</strong> to abandon the edit.</li></ol>
+<p>Ward changes are protected and apply only to your organisation. Once wards exist, clinical staff can open them and create admissions. If no wards exist, an administrator must complete this setup first.</p>
+<h3 id="approve-a-replacement-recovery-key">Approve a replacement recovery key</h3>
+<ol><li>Under <strong>Requests</strong>, locate <strong>Recovery key replacement requested</strong>.</li><li>Verify the member&#x27;s identity and compare the displayed <strong>New key fingerprint</strong> with the member through a trusted channel.</li><li>Select <strong>Review and approve replacement</strong>.</li><li>Confirm <strong>Verified — approve replacement</strong> only after completing that comparison. Use <strong>Reject request</strong> if the request should not proceed.</li></ol>
+<p>Approval replaces the registered key and grants access to existing organisation records. The previous phrase no longer unlocks that registered replacement key. It cannot erase keys or information someone previously copied.</p>
+<h3 id="rotate-keys-and-complete-access-update">Rotate keys and complete Access Update</h3>
+<p>To initiate a manual rotation, open <strong>Security → Rotate organisation key</strong>, review the dialog, then select <strong>Start Access Update</strong>. Deactivation and a member leaving can also require an Access Update.</p>
+<p>During the update, clinical access pauses. New approvals, member changes, and ward administration are also paused. Keep the administrator account online and unlocked while progress completes.</p>
+<p>If interrupted, sign back in and follow the maintenance screen. Enter <strong>Admin&#x27;s 12-word recovery phrase</strong> and select <strong>Unlock and continue update</strong>, or use <strong>Resume access update</strong> when enabled. Wait for <strong>Access Update complete</strong>. Remaining members may need to unlock their refreshed access afterward.</p>
+<p>Rotation updates access for active members; it does not remotely erase previously copied keys, clinical information, PDFs, or printouts.</p>
+<h2 id="17-troubleshooting-and-support">17. Troubleshooting and support</h2>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable reference table"><table><thead><tr><th scope="col">Problem</th><th scope="col">Action</th></tr></thead><tbody><tr><td>Email/password rejected</td><td>Check the address and credentials. If sign-up reports an existing account, use login. Select <strong>Forgot password?</strong>, enter your account email, and select <strong>Send reset link</strong> to choose a new password through the emailed link. Check spam or contact support if needed.</td></tr><tr><td>Verification email missing</td><td>Check the address and spam/junk folder; use <strong>Resend verification email</strong>, open the link, then <strong>I&#x27;ve verified my email</strong>.</td></tr><tr><td>Privacy review blocks access</td><td>Record a decision for the current policy. Your acceptance must be saved online. For a failed check, reconnect and select <strong>Retry server check</strong>.</td></tr><tr><td>Access pending</td><td>Wait for the organisation administrator. Confirm the intended code and requested role with them.</td></tr><tr><td>Joining form says you already have access</td><td>Open the <strong>account-name menu → Switch organisation</strong>, then select <strong>Continue</strong> for that organisation. Do not submit another joining request.</td></tr><tr><td>Switch organisation is missing or disabled</td><td>It appears in the account-name menu only when multiple active memberships are available. Wait for logout or leaving to finish if busy. If an expected membership is missing, reload or sign in again and ask the administrator to verify it.</td></tr><tr><td>Access declined or deactivated</td><td>Contact the organisation administrator. A different device or password does not restore membership.</td></tr><tr><td>Could not load organisation access</td><td>Reconnect and select <strong>Try again</strong>. Refer persistent failures to the administrator.</td></tr><tr><td>Recovery phrase rejected or records remain locked</td><td>Use your own phrase for the selected organisation, with all 12 words in order. Ask the administrator to check key access. If lost, use the doctor/nurse replacement flow.</td></tr><tr><td>No wards configured</td><td>Ask an administrator to create a ward under <strong>Admin console → Wards</strong>.</td></tr><tr><td>Expected woman not listed</td><td>Verify organisation and ward; clear search, select <strong>All women</strong>, check other pages, and check <strong>Archived women</strong>.</td></tr><tr><td>Future time or second-half field disabled</td><td>Check device time and the exact observation time. Wait until that time is eligible.</td></tr><tr><td>Typed LCG value did not save</td><td>Finish editing by selecting another cell. Resolve red validation errors and review messages about saving or sharing changes.</td></tr><tr><td>Partograph tap did not save</td><td>A tap is a preview. Review it and select <strong>Confirm and save</strong>.</td></tr><tr><td>Cannot edit or correct a saved cell</td><td>Your access may be below the cell&#x27;s recorded level, the admission may be archived, or saving/maintenance may be active. Ask an authorised colleague or administrator.</td></tr><tr><td>Cannot replace a sign-off</td><td>Only a strictly higher access level can supersede the current sign-off. Cell editing follows separate per-cell rules.</td></tr><tr><td>Read only · Senior staff setup needed / Preparing older records…</td><td>Older records need admission preparation. An authorised member with level 60 or above can perform it. Use <strong>Retry</strong> if preparation fails, or contact the administrator.</td></tr><tr><td>Some records unreadable or withheld</td><td>Report the displayed identifiers/error to the administrator. The chart may be incomplete; do not recreate missing entries merely to hide the warning.</td></tr><tr><td>Maintenance / Access Update remains visible</td><td>The administrator must come online, unlock, and resume or finish the update.</td></tr><tr><td>Export button disabled</td><td>Unlock records, wait for loading/saving, resolve feed errors, and ensure there is a saved observation.</td></tr><tr><td>Export preview does not open</td><td>Allow pop-ups for the site and select <strong>Export PDF / Print</strong> again.</td></tr><tr><td>Pending-sync message persists</td><td>Restore the connection and keep the app open to check that changes have been saved online. Do not clear site data while changes are pending.</td></tr><tr><td>Archive history cannot load</td><td>Select <strong>Retry</strong>. Ask the administrator to check your access and the setup issue described in the error.</td></tr><tr><td>Old app version still appears</td><td>Close all JananiSync tabs and installed windows, then reopen online.</td></tr><tr><td>Logout reports that remembered access could not be cleared</td><td>Follow the displayed instructions, close the browser, and notify the administrator before leaving a shared device.</td></tr></tbody></table></div>
+<p>For access, ward configuration, entry permissions, and treatment-record questions, contact your <strong>organisation administrator</strong> first.</p>
+<p>For application/privacy requests, the current in-app policy lists <strong>sharmilaarunbabuandabhishekdas@gmail.com</strong>. Confirm contact details in <strong>Privacy policy</strong> if they have changed. Include the organisation, affected task, approximate time, browser/device, and exact error. Use synthetic or redacted examples where possible. Do not send passwords, recovery phrases, or unnecessary patient details.</p>
+<p>There is no self-service account or patient-record deletion control. Send deletion or privacy requests through the contact in the policy or your healthcare organisation&#x27;s records office. Logout, denial, leaving, and archiving do not automatically delete retained records.</p>
+<h2 id="18-glossary">18. Glossary</h2>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable reference table"><table><thead><tr><th scope="col">Term</th><th scope="col">Meaning</th></tr></thead><tbody><tr><td>Admission</td><td>A woman&#x27;s recorded stay/session in a ward, with its associated chart.</td></tr><tr><td>Cell</td><td>One observation or header field at a particular time, where applicable.</td></tr><tr><td>Column</td><td>A chart time point containing several observation cells.</td></tr><tr><td>LCG</td><td>Labour Care Guide.</td></tr><tr><td>FHR</td><td>Fetal heart rate.</td></tr><tr><td>BP</td><td>Blood pressure.</td></tr><tr><td>G / P / L</td><td>Gravida / parity / living children.</td></tr><tr><td>POG</td><td>Period of gestation, entered as completed weeks and additional days.</td></tr><tr><td>CR / IP</td><td>Registration / inpatient identifiers used by the organisation.</td></tr><tr><td>Sign-off</td><td>An attributed acknowledgement of a column&#x27;s observations.</td></tr><tr><td>Recovery phrase</td><td>Twelve secret words used to unlock patient records.</td></tr><tr><td>Fingerprint</td><td>A code you can share with your administrator to check your recovery key.</td></tr><tr><td>Access Update</td><td>The organisation&#x27;s key-update process, during which clinical access pauses.</td></tr><tr><td>Archive</td><td>Retain an admission in the archived list with read-only clinical access.</td></tr><tr><td>Pending sync</td><td>A change saved on your device that is waiting to be saved online.</td></tr></tbody></table></div>
+    </main>
+  </div>
+  <footer>JananiSync documentation · Use your browser’s Find or Print command to search or save this manual.</footer>
+</body>
+</html>

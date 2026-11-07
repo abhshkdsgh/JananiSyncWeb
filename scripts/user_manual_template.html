@@ -1,0 +1,99 @@
+<!doctype html>
+<!-- Generated from USER_MANUAL.md. Edit the Markdown or this template, then run scripts/generate_user_manual.py. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="The public JananiSync user manual: accounts, ward admissions, Labour Care Guide, Partograph, exports, and administrator tasks. No sign-in required.">
+  <meta name="theme-color" content="#502b80">
+  <title>User Manual · JananiSync</title>
+  <style>
+    :root { color-scheme: light; --ink: #242035; --muted: #625d73; --purple: #623994; --line: #e4dfec; }
+    * { box-sizing: border-box; }
+    html { scroll-padding-top: 6rem; }
+    body { margin: 0; color: var(--ink); background: #f7f5fa; font: 1rem/1.75 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    a { color: var(--purple); text-underline-offset: .2em; }
+    a:hover { color: #3c1a64; }
+    :focus-visible { outline: 3px solid #9975c6; outline-offset: 4px; }
+    .skip { position: absolute; left: 1rem; top: -5rem; z-index: 3; padding: .6rem 1rem; background: white; }
+    .skip:focus { top: .5rem; }
+    .site-header { position: sticky; top: 0; z-index: 2; border-bottom: 1px solid var(--line); background: #fff; }
+    .header-inner { max-width: 1440px; margin: auto; padding: 1rem 2rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .brand { color: var(--ink); font-weight: 750; font-size: 1.2rem; text-decoration: none; }
+    .brand span { color: var(--muted); font-weight: 400; font-size: .9rem; margin-left: .75rem; }
+    .app-link { display: inline-block; border: 1px solid var(--line); border-radius: .5rem; padding: .35rem .85rem; font-weight: 600; text-decoration: none; white-space: nowrap; }
+    .layout { max-width: 1440px; margin: auto; display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 2.5rem; padding: 2rem; align-items: start; }
+    .contents { position: sticky; top: 6rem; max-height: calc(100dvh - 7rem); overflow: auto; padding: 0 .5rem .5rem 0; }
+    .contents summary { font-weight: 700; cursor: pointer; padding: .5rem 0; }
+    .contents ul { margin: .4rem 0 0; list-style: none; padding: 0; }
+    .contents a { display: block; border-radius: .4rem; padding: .35rem .65rem; color: var(--muted); font-size: .875rem; line-height: 1.5; text-decoration: none; }
+    .contents a:hover, .contents a:focus { color: var(--purple); background: #eee7f6; }
+    main { min-width: 0; padding: 2.5rem 3rem; border: 1px solid var(--line); border-radius: 1rem; background: #fff; }
+    .public-note { margin: 0 0 1rem; color: var(--purple); font-size: .8rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    h1, h2, h3 { line-height: 1.25; letter-spacing: -.025em; }
+    h1 { font-size: clamp(2rem, 4vw, 3rem); margin: 0 0 1.5rem; }
+    h2 { font-size: 1.65rem; margin: 3rem 0 1.2rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
+    h3 { font-size: 1.15rem; margin: 2rem 0 .8rem; }
+    p { margin: .85rem 0; }
+    li { margin: .5rem 0; }
+    ul, ol { padding-left: 1.5rem; }
+    code { padding: .1em .3em; border-radius: .25rem; background: #f2eef7; font-size: .875em; overflow-wrap: anywhere; }
+    .table-scroll { overflow-x: auto; margin: 1.3rem 0; border: 1px solid var(--line); border-radius: .5rem; }
+    table { width: 100%; border-collapse: collapse; font-size: .925rem; line-height: 1.6; }
+    th, td { padding: .8rem 1rem; text-align: left; vertical-align: top; min-width: 10rem; }
+    th { background: #f2eef7; font-weight: 650; }
+    td { border-top: 1px solid var(--line); }
+    tbody tr:nth-child(even) { background: #fcfbfd; }
+    footer { color: var(--muted); font-size: .875rem; text-align: center; padding: 0 1.5rem 2rem; }
+    @media (max-width: 1000px) {
+      .layout { grid-template-columns: 220px minmax(0, 1fr); gap: 1.5rem; padding: 1.5rem; }
+      main { padding: 2rem; }
+    }
+    @media (max-width: 760px) {
+      html { scroll-padding-top: 5.5rem; }
+      .header-inner { padding: .8rem 1rem; }
+      .brand span { display: none; }
+      .layout { display: block; padding: 1rem; }
+      .contents { position: static; max-height: none; padding: .4rem 1rem; margin-bottom: 1rem; background: #fff; border: 1px solid var(--line); border-radius: .75rem; }
+      main { padding: 1.4rem; border-radius: .75rem; }
+      h2 { font-size: 1.4rem; }
+      th, td { padding: .65rem; }
+    }
+    @media print {
+      .site-header, .contents, .skip, footer, .public-note { display: none; }
+      body { background: white; font-size: 10pt; color: black; }
+      .layout { display: block; padding: 0; max-width: none; }
+      main { padding: 0; border: 0; }
+      h2, h3 { break-after: avoid; }
+      tr { break-inside: avoid; }
+      .table-scroll { overflow: visible; }
+      th, td { min-width: 0; }
+      a { color: inherit; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#manual">Skip to manual</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="./">JananiSync <span>Help &amp; documentation</span></a>
+      <a class="app-link" href="./">Open JananiSync &rarr;</a>
+    </div>
+  </header>
+  <div class="layout">
+    <nav class="contents" aria-label="Manual contents">
+      <details open>
+        <summary>On this page</summary>
+        <ul>
+{{CONTENTS}}
+        </ul>
+      </details>
+    </nav>
+    <main id="manual" tabindex="-1">
+      <p class="public-note">Public user guide · No sign-in required</p>
+{{BODY}}
+    </main>
+  </div>
+  <footer>JananiSync documentation · Use your browser’s Find or Print command to search or save this manual.</footer>
+</body>
+</html>

@@ -1,0 +1,8 @@
+{
+  "name": "jananisync-maintenance",
+  "private": true,
+  "description": "Standalone Firestore maintenance utilities",
+  "dependencies": {
+    "firebase-admin": "^13.6.0"
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "score": 2,
+  "summary": "Local current-schema rules hardened and regression-tested. This conservative rollout score reflects the conditional major legacy-permission risk until trusted migration is verified; it is not a claim that live data contains unmigrated columns. Production rules, data and IAM were not inspected or deployed.",
+  "findings": [
+    {
+      "check": "Atomic sign-off integrity",
+      "severity": "major",
+      "status": "fixed",
+      "issue": "A column could be marked signed by referencing an existing cell event, without appending a matching sign-off. Reproduced as an unexpected HTTP 200 before the fix.",
+      "recommendation": "Implemented same-commit fresh immutable sign-off validation of column, author, access, revision and server timestamp."
+    },
+    {
+      "check": "Key recipient authorization",
+      "severity": "major",
+      "status": "fixed",
+      "issue": "Envelope writes checked the granting admin rather than the target membership, allowing delivery to absent/inactive users. Reproduced before the fix.",
+      "recommendation": "Implemented active recipient validation with getAfter, preserving atomic approval plus grant and admin initialization."
+    },
+    {
+      "check": "Authorization metadata integrity",
+      "severity": "minor",
+      "status": "fixed",
+      "issue": "A tied editor could append a different UID to highestEditorUids. Reproduced before the fix.",
+      "recommendation": "Only the current editor UID may be added; duplicates are rejected. Legitimate equal-level editors remain supported."
+    },
+    {
+      "check": "Type safety and resource bounds",
+      "severity": "minor",
+      "status": "fixed",
+      "issue": "Chart starts accepted negative times and unbounded session strings. Membership authorization did not check UID binding, supported role or valid access range.",
+      "recommendation": "Added nonnegative time, bounded session/UID/revision/index checks and shared identity/role/access membership validation."
+    },
+    {
+      "check": "Historical authorization",
+      "severity": "major",
+      "status": "conditional_rollout_dependency",
+      "issue": "For legacy columns without cellAccessLevels, the existing compatibility path cannot enforce historical encrypted per-cell permissions on the server. The client reconstructs history, but a modified client can bypass client checks. Whether such columns exist in production was not investigated.",
+      "recommendation": "Verify and, if needed, run the trusted migration in docs/cell-access-rollout.md before rollout. This pass preserves legacy functionality rather than silently locking those records. Migration requires authorized administrator access and the organization key for encrypted graph history."
+    }
+  ],
+  "optimization": [
+    "Centralized membership identity, status, role and access validation; authenticate before membership reads.",
+    "Removed the redundant admin-or-clinician read branch because admins are supported clinical members.",
+    "Read the prior sign-off once in a helper invoked only for already signed columns; unsigned columns do not read a nonexistent prior event.",
+    "Removed an unused observation validator and unused correction arguments. Existing Firestore document-read caching means these simplifications are not a measured billing reduction."
+  ],
+  "compatibility": [
+    "No new persistent fields, query filters, indexes or client changes required for the current schema.",
+    "Verified membership joining, approval, key initialization and rotation, private backup ownership, collection-group queries, roster access, archive/unarchive, saved observations, corrections and sign-off hierarchy.",
+    "Owner recovery reads for encrypted key backups remain available after membership deactivation; other users and admins cannot read them.",
+    "Clinical reads remain organization-wide. Ward/patient assignment restrictions were not introduced.",
+    "Rules validate ciphertext envelopes and authorization metadata, not encrypted clinical values or cryptographic correctness.",
+    "Legacy records with missing name fields remain supported by existing member update validators; malformed UID/role/access authority is rejected."
+  ],
+  "verification": {
+    "before": "18 existing emulator test groups passed; all four new attack groups failed because prohibited writes returned HTTP 200.",
+    "after": "25 emulator groups passed, 0 failures; includes valid workflow tests and malicious identity/schema/type/size writes.",
+    "migration_tests": "4 passed",
+    "client_tests": "189 previously passing browser tests remain passing; Gradle reused their unchanged up-to-date results.",
+    "compilation": "JS and Wasm Kotlin targets successful (unchanged client outputs reused).",
+    "commands": [
+      "firebase emulators:exec --project demo-jananisync --config firebase.security-tests.json --only firestore 'node --test tests/security/firestore-url-access.test.cjs'",
+      "node --test tests/security/cell-access-migration.test.cjs",
+      "CHROME_BIN='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' ./gradlew :shared:jsBrowserTest :shared:compileKotlinWasmJs --offline -Pkotlin.incremental.js.ir=false"
+    ],
+    "production_deployment_performed": false,
+    "live_rules_verified": false
+  }
+}
